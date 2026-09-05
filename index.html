@@ -1000,6 +1000,10 @@
       <button type="button" data-v="receipt">ใบเสร็จรับเงิน</button>
       <button type="button" data-v="contract">สัญญาจ้างทำของ</button>
     </div>
+    <div class="searchbar" style="margin-bottom:12px;">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      <input id="search-hist" type="text" placeholder="ค้นหาเลขที่เอกสาร / ชื่อลูกความ / วันที่ / จำนวนเงิน">
+    </div>
     <div id="hist-list" style="max-height:56vh;overflow-y:auto;">
       <div class="items-hint">กำลังโหลด...</div>
     </div>
@@ -2960,7 +2964,11 @@ function closeDocModal(type){
 document.getElementById("btnQuote").addEventListener("click", ()=>openDocModal("quote"));
 document.getElementById("btnReceipt").addEventListener("click", ()=>openDocModal("receipt"));
 document.getElementById("btnContract").addEventListener("click", ()=>openDocModal("contract"));
-document.getElementById("btnDocHistory").addEventListener("click", ()=>openDocModal("history"));
+document.getElementById("btnDocHistory").addEventListener("click", ()=>{
+  const s = document.getElementById("search-hist");
+  if(s) s.value = "";
+  openDocModal("history");
+});
 
 // แท็บสลับ ใบเสนอราคา / ใบเสร็จรับเงิน ในหน้าประวัติ
 let currentHistTab = "quote";
@@ -2971,6 +2979,12 @@ document.querySelectorAll("#hist-tab-seg button").forEach(btn=>{
     currentHistTab = btn.dataset.v;
     loadDocHistory(currentHistTab);
   });
+});
+
+// ค้นหาในประวัติเอกสาร
+document.getElementById("search-hist").addEventListener("input", ()=>{
+  const list = HIST_CFG_[currentHistTab].cache();
+  if(list) renderHistList(list, currentHistTab);
 });
 
 // ปุ่มเลือกชั้น (ชั้นพนักงานสอบสวน/ศาลชั้นต้น/อุทธรณ์/ฎีกา/บังคับคดี) — ติ๊กได้หลายชั้นพร้อมกัน
@@ -3232,7 +3246,18 @@ function renderHistList(list, tab){
     box.innerHTML = `<div class="items-hint">ยังไม่เคยออก${cfg.label}เลยค่ะ</div>`;
     return;
   }
-  box.innerHTML = list.map((d,i)=>{
+  const box2 = document.getElementById("search-hist");
+  const q = (box2 ? box2.value : "").trim().toLowerCase();
+  const rows = list.map((d,i)=>({d,i})).filter(({d})=>{
+    if(!q) return true;
+    return [d.docNo, cfg.nameOf(d), cfg.subOf(d), d.total, fmtMoney(d.total)]
+      .join(" ").toLowerCase().includes(q);
+  });
+  if(!rows.length){
+    box.innerHTML = `<div class="items-hint">ไม่พบ${cfg.label}ที่ตรงกับ "${esc(q)}"</div>`;
+    return;
+  }
+  box.innerHTML = rows.map(({d,i})=>{
     return `<div class="hist-row">
       <div class="hi-main">
         <div class="hi-no">${esc(d.docNo)}</div>
