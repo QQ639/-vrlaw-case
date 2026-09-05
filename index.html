@@ -653,31 +653,31 @@
 
   <section id="view-trial" class="view">
     <div class="searchbar"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
-      <input id="search-trial" type="text" placeholder="ค้นหาเลขคดี / คู่ความ / ทนายความ / หมายเหตุ"></div>
+      <input id="search-trial" type="text" placeholder="ค้นหาเลขคดี / ชื่อคดี / คู่ความ / ลูกความ / ทนายความ / หมายเหตุ"></div>
     <div id="list-trial"></div>
   </section>
 
   <section id="view-appeal" class="view">
     <div class="searchbar"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
-      <input id="search-appeal" type="text" placeholder="ค้นหาเลขคดี / คู่ความ / ทนายความ / หมายเหตุ"></div>
+      <input id="search-appeal" type="text" placeholder="ค้นหาเลขคดี / ชื่อคดี / คู่ความ / ลูกความ / ทนายความ / หมายเหตุ"></div>
     <div id="list-appeal"></div>
   </section>
 
   <section id="view-supreme" class="view">
     <div class="searchbar"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
-      <input id="search-supreme" type="text" placeholder="ค้นหาเลขคดี / คู่ความ / ทนายความ / หมายเหตุ"></div>
+      <input id="search-supreme" type="text" placeholder="ค้นหาเลขคดี / ชื่อคดี / คู่ความ / ลูกความ / ทนายความ / หมายเหตุ"></div>
     <div id="list-supreme"></div>
   </section>
 
   <section id="view-enforcement" class="view">
     <div class="searchbar"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
-      <input id="search-enforcement" type="text" placeholder="ค้นหาเลขคดี / คู่ความ / ทนายความ / หมายเหตุ"></div>
+      <input id="search-enforcement" type="text" placeholder="ค้นหาเลขคดี / ชื่อคดี / คู่ความ / ลูกความ / ทนายความ / หมายเหตุ"></div>
     <div id="list-enforcement"></div>
   </section>
 
   <section id="view-closed" class="view">
     <div class="searchbar"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
-      <input id="search-closed" type="text" placeholder="ค้นหาเลขคดี / คู่ความ / ทนายความ / หมายเหตุ"></div>
+      <input id="search-closed" type="text" placeholder="ค้นหาเลขคดี / ชื่อคดี / คู่ความ / ลูกความ / ทนายความ / หมายเหตุ"></div>
     <div id="list-closed"></div>
   </section>
 
@@ -778,7 +778,7 @@
     <div class="cal-bar">
       <div class="searchbar" style="flex:1;margin-bottom:0;">
         <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
-        <input id="search-summary" type="text" placeholder="กรองด้วยเลขคดี / คู่ความ / ทนายความ">
+        <input id="search-summary" type="text" placeholder="กรองด้วยเลขคดี / ชื่อคดี / คู่ความ / ลูกความ / ทนายความ">
       </div>
       <button class="btn ghost sm" id="printSummary">พิมพ์ตารางสรุป</button>
     </div>
@@ -1002,7 +1002,7 @@
     </div>
     <div class="searchbar" style="margin-bottom:12px;">
       <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
-      <input id="search-hist" type="text" placeholder="ค้นหาเลขที่เอกสาร / ชื่อลูกความ / วันที่ / จำนวนเงิน">
+      <input id="search-hist" type="text" placeholder="ค้นหาเลขที่เอกสาร / ชื่อคดี / เลขคดี / คู่ความ / ลูกความ / จำนวนเงิน">
     </div>
     <div id="hist-list" style="max-height:56vh;overflow-y:auto;">
       <div class="items-hint">กำลังโหลด...</div>
@@ -1466,6 +1466,18 @@ function partiesDisplay(c){
   if(c.petitioner && hasMiddle(c)) parts.push(middleRole(c)+" "+c.petitioner);
   return parts.length ? parts.join(" · ") : "(ยังไม่ระบุคู่ความ)";
 }
+
+/** ข้อความรวมทุกช่องที่ใช้ค้นหาสำนวน — เลขคดี ชื่อคดี คู่ความ ลูกความ ฯลฯ */
+function caseHaystack(c){
+  return [
+    c.seqNo, c.caseNumber, c.redNumber,
+    c.caseType, c.charge,                    // ชื่อคดี / ประเภทคดี / ข้อหา
+    partiesDisplay(c), c.petitioner,
+    c.court, c.lawyer, c.side,
+    c.clientName, c.clientPhone,
+    c.status, c.notes, c.claimAmount
+  ].filter(Boolean).join(" ").toLowerCase();
+}
 let toastTimer;
 function toast(msg){
   const t = document.getElementById("toast");
@@ -1652,7 +1664,7 @@ function renderStageList(stage, filter){
   const filtered = cases.filter(c=>{
     if(getStage(c.status) !== stage) return false;
     if(!q) return true;
-    return (c.caseNumber+partiesDisplay(c)+c.lawyer+c.court+(c.notes||"")).toLowerCase().includes(q);
+    return caseHaystack(c).includes(q);
   }).sort((a,b)=>{
     const da = nextApptDate(a) || "9999-12-31", db = nextApptDate(b) || "9999-12-31";
     return da !== db ? da.localeCompare(db)
@@ -1662,7 +1674,7 @@ function renderStageList(stage, filter){
   updateCounts();
   if(filtered.length===0){
     el.innerHTML = q
-      ? `<div class="empty"><b>ไม่พบสำนวนที่ตรงกับคำค้น</b>ลองค้นด้วยเลขคดี ชื่อคู่ความ ชื่อทนายความ หรือข้อความในหมายเหตุ</div>`
+      ? `<div class="empty"><b>ไม่พบสำนวนที่ตรงกับคำค้น</b>ลองค้นด้วยเลขคดี ชื่อคดี ข้อหา ชื่อคู่ความ ชื่อลูกความ ชื่อทนายความ หรือข้อความในหมายเหตุ</div>`
       : `<div class="empty"><b>${STAGE_EMPTY_MSG[stage]}</b>สำนวนจะย้ายมาที่นี่อัตโนมัติเมื่อเปลี่ยนสถานะที่เกี่ยวข้อง</div>`;
     return;
   }
@@ -2695,7 +2707,7 @@ function summaryRows(filter){
   const q = (filter||"").trim().toLowerCase();
   return cases.filter(c=>{
     if(!q) return true;
-    return (c.caseNumber+partiesDisplay(c)+c.lawyer+c.court+(c.seqNo||"")).toLowerCase().includes(q);
+    return caseHaystack(c).includes(q);
   }).sort(SUMMARY_SORTS[summarySort] || SUMMARY_SORTS.seq);
 }
 
@@ -3239,6 +3251,22 @@ async function loadDocHistory(tab){
   }
 }
 
+/** ข้อความรวมทุกช่องของเอกสาร 1 ฉบับ ใช้เป็นเป้าค้นหา */
+function histHaystack(d, cfg){
+  const parts = [cfg.nameOf(d), cfg.subOf(d), fmtMoney(d.total)];
+  const push = v=>{
+    if(v === null || v === undefined || v === "") return;
+    if(Array.isArray(v)) v.forEach(push);
+    else if(typeof v === "object") Object.keys(v).forEach(k=>push(v[k]));
+    else parts.push(v);
+  };
+  Object.keys(d).forEach(k=>{
+    if(k === "createdAt" || k === "createdBy" || k === "id") return;
+    push(d[k]);
+  });
+  return parts.join(" ").toLowerCase();
+}
+
 function renderHistList(list, tab){
   const box = document.getElementById("hist-list");
   const cfg = HIST_CFG_[tab];
@@ -3250,8 +3278,7 @@ function renderHistList(list, tab){
   const q = (box2 ? box2.value : "").trim().toLowerCase();
   const rows = list.map((d,i)=>({d,i})).filter(({d})=>{
     if(!q) return true;
-    return [d.docNo, cfg.nameOf(d), cfg.subOf(d), d.total, fmtMoney(d.total)]
-      .join(" ").toLowerCase().includes(q);
+    return histHaystack(d, cfg).includes(q);
   });
   if(!rows.length){
     box.innerHTML = `<div class="items-hint">ไม่พบ${cfg.label}ที่ตรงกับ "${esc(q)}"</div>`;
