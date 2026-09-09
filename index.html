@@ -3241,6 +3241,14 @@ function openDocPrintWindow(title, bodyHtml){
   setTimeout(()=>{ w.focus(); w.print(); }, 200);
 }
 
+/** ตราประทับ "ยกเลิกแล้ว" กลางหัวเอกสาร — โผล่เฉพาะฉบับที่ถูกยกเลิก */
+function voidStamp(data){
+  if(String((data && data.status) || "").indexOf("ยกเลิก") !== 0) return "";
+  return `<div style="text-align:center;color:#b3261e;font-size:18pt;font-weight:700;
+    margin:-10px 0 14px;letter-spacing:3px;">** ยกเลิกแล้ว **<div style="font-size:11pt;
+    font-weight:400;letter-spacing:0;">${esc(data.status)}</div></div>`;
+}
+
 /** สร้าง HTML เนื้อหาใบเสนอราคา จากข้อมูล (ใช้ทั้งตอนสร้างใหม่และพิมพ์ซ้ำจากประวัติ) */
 function buildQuoteBody(data){
   const rows = data.items.map((it,i)=>`<tr>
@@ -3256,6 +3264,7 @@ function buildQuoteBody(data){
       <div class="office">สำนักกฎหมาย วีอาร์ลอว์<small>๕/๒๓ หมู่ที่ ๑๑ ตำบลบางน้ำผึ้ง อำเภอพระประแดง จังหวัดสมุทรปราการ · โทร ๐๘๐๒๗๖๗๕๕๕</small><small>ใบเสนอราคา · เลขที่ ${data.docNo}</small></div>
     </div>
     <div class="doctitle">ใบเสนอราคา</div>
+    ${voidStamp(data)}
     <div class="meta">
       <div><b>เสนอราคาให้:</b><br>${esc(data.client)}${data.address?"<br>"+esc(data.address).replace(/\n/g,"<br>"):""}</div>
       <div style="text-align:right;">
@@ -3332,6 +3341,7 @@ function buildReceiptBody(data){
       <div class="office">สำนักกฎหมาย วีอาร์ลอว์<small>๕/๒๓ หมู่ที่ ๑๑ ตำบลบางน้ำผึ้ง อำเภอพระประแดง จังหวัดสมุทรปราการ · โทร ๐๘๐๒๗๖๗๕๕๕</small><small>ใบเสร็จรับเงิน · เลขที่ ${data.docNo}</small></div>
     </div>
     <div class="doctitle">ใบเสร็จรับเงิน</div>
+    ${voidStamp(data)}
     <div class="meta">
       <div><b>ได้รับเงินจาก:</b><br>${esc(data.payer)}</div>
       <div style="text-align:right;">
@@ -3405,6 +3415,7 @@ function buildBillingBody(data){
       <div class="office">สำนักกฎหมาย วีอาร์ลอว์<small>๕/๒๓ หมู่ที่ ๑๑ ตำบลบางน้ำผึ้ง อำเภอพระประแดง จังหวัดสมุทรปราการ · โทร ๐๘๐๒๗๖๗๕๕๕</small><small>ใบวางบิล · เลขที่ ${data.docNo}</small></div>
     </div>
     <div class="doctitle">ใบวางบิล / ใบแจ้งหนี้</div>
+    ${voidStamp(data)}
     <div class="meta">
       <div><b>วางบิลถึง:</b><br>${esc(data.client)}${data.address?"<br>"+esc(data.address).replace(/\n/g,"<br>"):""}${data.contact?"<br>ผู้ติดต่อ "+esc(data.contact):""}</div>
       <div style="text-align:right;">
@@ -3545,16 +3556,51 @@ function renderHistList(list, tab){
     return;
   }
   box.innerHTML = rows.map(({d,i})=>{
-    return `<div class="hist-row">
+    return `<div class="hist-row"${isVoided(d)?' style="opacity:.55;"':''}>
       <div class="hi-main">
-        <div class="hi-no">${esc(d.docNo)}</div>
+        <div class="hi-no">${esc(d.docNo)}${isVoided(d)?' · <span style="color:#b3261e;">ยกเลิกแล้ว</span>':''}</div>
         <div class="hi-name">${esc(cfg.nameOf(d))}</div>
         <div class="hi-sub">${esc(cfg.subOf(d))}</div>
       </div>
       <div class="hi-amt">${fmtMoney(d.total)} บาท</div>
       <button class="btn ghost sm" onclick="reprintDoc('${tab}', ${i})">พิมพ์ซ้ำ</button>
+      <button class="btn ghost sm" onclick="voidDoc('${tab}', ${i})"${isVoided(d)?" disabled":""}>ยกเลิก</button>
+      <button class="btn ghost sm" onclick="deleteDoc('${tab}', ${i})">ลบ</button>
     </div>`;
   }).join("");
+}
+
+/** เอกสารฉบับนี้ถูกยกเลิกไปแล้วหรือยัง */
+function isVoided(d){
+  return String((d && d.status) || "").indexOf("ยกเลิก") === 0;
+}
+
+/** ยกเลิกเอกสาร — เก็บแถวไว้ เลขที่ไม่หาย แต่ทำเครื่องหมายว่ายกเลิกแล้ว */
+async function voidDoc(tab, idx){
+  const cfg = HIST_CFG_[tab];
+  const d = cfg.cache()[idx];
+  if(!d) return;
+  if(!confirm(`ยกเลิก${cfg.label} ${d.docNo} ?\n\nเลขที่เอกสารจะยังอยู่ในระบบ แต่ทำเครื่องหมายว่ายกเลิกแล้ว\nเหมาะกับกรณีที่ส่งเอกสารให้ลูกความไปแล้ว`)) return;
+  try{
+    await api("voidDoc", {kind:tab, id:d.id});
+    toast(`ยกเลิก${cfg.label} ${d.docNo} แล้ว`);
+  }catch(e){ toast("ยกเลิกไม่สำเร็จ: "+e.message); return; }
+  cfg.setCache(null);
+  loadDocHistory(tab);
+}
+
+/** ลบเอกสารถาวร — ใช้เฉพาะตอนพิมพ์ผิดแล้วยังไม่ได้ส่งให้ใคร */
+async function deleteDoc(tab, idx){
+  const cfg = HIST_CFG_[tab];
+  const d = cfg.cache()[idx];
+  if(!d) return;
+  if(!confirm(`ลบ${cfg.label} ${d.docNo} ออกจากระบบถาวร?\n\nลบแล้วกู้คืนไม่ได้ และเลขที่เอกสารจะหายไปจากชีต\nถ้าส่งให้ลูกความไปแล้ว ควรกด "ยกเลิก" แทน`)) return;
+  try{
+    await api("deleteDoc", {kind:tab, id:d.id});
+    toast(`ลบ${cfg.label} ${d.docNo} แล้ว`);
+  }catch(e){ toast("ลบไม่สำเร็จ: "+e.message); return; }
+  cfg.setCache(null);
+  loadDocHistory(tab);
 }
 
 function clipText(t, n){
@@ -3635,6 +3681,7 @@ function buildContractBody(data){
     </div>
     <div style="text-align:center;font-size:18pt;font-weight:700;margin:14px 0 4px;">สัญญาจ้างทำของ</div>
     <div style="text-align:center;font-size:12pt;color:#555;margin-bottom:16px;">เลขที่ ${data.docNo}</div>
+    ${voidStamp(data)}
     <div style="text-align:right;margin-bottom:14px;">วันที่ ${dayTH} เดือน ${esc(monthTH)} พ.ศ. ${yearTH}</div>
 
     <p style="text-indent:2em;">
