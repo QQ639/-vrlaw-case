@@ -2724,6 +2724,17 @@ const SUMMARY_SORTS = {
     const da = nextApptDate(a) || "9999-12-31", db = nextApptDate(b) || "9999-12-31";
     return da.localeCompare(db) || seqValue(a) - seqValue(b);
   },
+  // ชื่อศาล แล้ววันนัดใกล้สุด
+  court: (a,b)=>{
+    const ca = String(a.court||"").trim(), cb = String(b.court||"").trim();
+    if(ca !== cb){
+      if(!ca) return 1;
+      if(!cb) return -1;
+      return ca.localeCompare(cb, "th");
+    }
+    const da = nextApptDate(a) || "9999-12-31", db = nextApptDate(b) || "9999-12-31";
+    return da.localeCompare(db) || seqValue(a) - seqValue(b);
+  },
   // วันนัดใกล้สุดก่อน
   appt: (a,b)=>{
     const da = nextApptDate(a) || "9999-12-31", db = nextApptDate(b) || "9999-12-31";
@@ -2737,7 +2748,7 @@ const SUMMARY_SORTS = {
   lawyer: (a,b)=> String(a.lawyer||"").localeCompare(String(b.lawyer||""), "th") || seqValue(a)-seqValue(b)
 };
 let summarySort = "seq";   // ค่าเริ่มต้น: เรียงตามลำดับสำนวน
-const SORT_LABELS = {seq:"ลำดับสำนวน", stage:"ชั้นศาล", appt:"วันนัด",
+const SORT_LABELS = {seq:"ลำดับสำนวน", stage:"ชั้นศาล", court:"ชื่อศาล", appt:"วันนัด",
                      caseNo:"เลขคดี", parties:"ชื่อคดี", lawyer:"ทนาย"};
 function setSummarySort(key){
   summarySort = key;
@@ -2761,7 +2772,7 @@ function renderSummary(filter){
       ${th("ลำดับ","seq",'style="width:70px"')}
       ${th("เลขคดี","caseNo",'style="width:110px"')}
       ${th("ชื่อคดี (คู่ความ)","parties")}
-      ${th("ชั้นศาล","stage",'style="width:140px"')}
+      ${th("ชื่อศาล","court",'style="width:180px"')}
       <th style="width:180px">อยู่ระหว่าง</th>
       ${th("วันนัดถัดไป","appt",'style="width:150px"')}
       ${th("ทนาย","lawyer",'style="width:110px"')}
@@ -2773,7 +2784,7 @@ function renderSummary(filter){
       <td class="c">${esc(c.seqNo||"—")}</td>
       <td>${esc(c.caseNumber)}</td>
       <td>${esc(partiesDisplay(c))}</td>
-      <td>${esc(STAGE_NAMES[getStage(c.status)])}</td>
+      <td>${esc(c.court||"—")}</td>
       <td>${esc(c.status||"—")}</td>
       <td>${a?esc(apptLabel(a)):"—"}</td>
       <td>${esc(c.lawyer)}</td>
@@ -2802,7 +2813,7 @@ function printSummary(){
       <td class="c">${esc(toThaiNum(c.seqNo||"—"))}</td>
       <td>${esc(toThaiNum(c.caseNumber))}</td>
       <td>${esc(partiesDisplay(c))}</td>
-      <td>${esc(STAGE_NAMES[getStage(c.status)])}</td>
+      <td>${esc(c.court||"—")}</td>
       <td>${esc(c.status||"—")}</td>
       <td>${a?esc(coverApptLine(a)):"—"}</td>
       <td>${esc(c.lawyer)}</td>
@@ -2819,8 +2830,8 @@ function printSummary(){
 
   const theadTpl = `<thead><tr>
       <th style="width:5%">ที่</th><th style="width:7%">ลำดับ</th><th style="width:13%">เลขคดี</th>
-      <th style="width:24%">ชื่อคดี (คู่ความ)</th><th style="width:12%">ชั้นศาล</th>
-      <th style="width:16%">อยู่ระหว่าง</th><th style="width:14%">วันนัดถัดไป</th>
+      <th style="width:22%">ชื่อคดี (คู่ความ)</th><th style="width:16%">ชื่อศาล</th>
+      <th style="width:14%">อยู่ระหว่าง</th><th style="width:14%">วันนัดถัดไป</th>
       <th style="width:9%">ทนาย</th>
     </tr></thead>`;
 
