@@ -627,6 +627,7 @@
     <span class="sync-spacer"></span>
     <button class="linkbtn" id="btnQuote">ใบเสนอราคา</button>
     <button class="linkbtn" id="btnReceipt">ใบเสร็จรับเงิน</button>
+    <button class="linkbtn" id="btnBilling">ใบวางบิล</button>
     <button class="linkbtn" id="btnContract">สัญญาจ้างทำของ</button>
     <button class="linkbtn" id="btnDocHistory">ประวัติเอกสาร</button>
     <button class="linkbtn" id="refreshBtn" style="display:none;">โหลดข้อมูลใหม่</button>
@@ -899,6 +900,53 @@
   </div>
 </div>
 
+<div class="docmodal-bg" id="billingModalBg">
+  <div class="docmodal">
+    <h3>ใบวางบิล</h3>
+    <p class="hint">กรอกแล้วกดพิมพ์ — ระบบรันเลขที่ให้อัตโนมัติ (BL001/2569) และบันทึกลงชีต “ใบวางบิล” ดูย้อนหลังได้ที่ประวัติเอกสาร</p>
+    <div class="drow">
+      <div class="dfield"><label>วันที่วางบิล</label><input type="date" id="b-date"></div>
+      <div class="dfield"><label>กำหนดชำระภายใน (วัน)</label><input type="number" id="b-creditdays" value="15" min="0"></div>
+    </div>
+    <div class="drow">
+      <div class="dfield"><label>วางบิลถึง (ชื่อลูกค้า / บริษัท)</label><input id="b-client" placeholder="เช่น บริษัท เอบีซี จำกัด"></div>
+    </div>
+    <div class="drow">
+      <div class="dfield"><label>ที่อยู่ผู้รับวางบิล (ไม่บังคับ)</label><textarea id="b-addr" style="min-height:50px;"></textarea></div>
+    </div>
+    <div class="drow">
+      <div class="dfield"><label>ผู้ติดต่อ / แผนก (ไม่บังคับ)</label><input id="b-contact" placeholder="เช่น คุณสมหญิง ฝ่ายบัญชี โทร 08x-xxx-xxxx"></div>
+    </div>
+    <div class="drow">
+      <div class="dfield"><label>เลขคดี (ไม่บังคับ)</label><input id="b-caseno" placeholder="เช่น พ.88/2569"></div>
+      <div class="dfield"><label>ศาล (ไม่บังคับ)</label><input id="b-court" placeholder="เช่น ศาลจังหวัดสมุทรปราการ"></div>
+    </div>
+    <div class="drow">
+      <div class="dfield">
+        <label>รายการ + จำนวนเงิน (บรรทัดละ 1 รายการ คั่นด้วย :)</label>
+        <textarea class="items" id="b-items" placeholder="ค่าจ้างว่าความ ชั้นศาลชั้นต้น งวดที่ 2 : 30000&#10;ค่าธรรมเนียมศาลที่ทดรองจ่าย : 3500"></textarea>
+        <div class="items-hint">ระบบรวมยอดให้อัตโนมัติจากตัวเลขหลัง :</div>
+      </div>
+    </div>
+    <div class="drow">
+      <div class="dfield"><label class="chk"><input type="checkbox" id="b-vat"> คิดภาษีมูลค่าเพิ่ม 7%</label></div>
+    </div>
+    <div class="drow">
+      <div class="dfield"><label>ช่องทางชำระเงิน</label><textarea id="b-payinfo" style="min-height:50px;" placeholder="เช่น โอนเข้าบัญชี ธนาคารกสิกรไทย เลขที่ 123-4-56789-0 ชื่อบัญชี สำนักกฎหมาย วีอาร์ลอว์"></textarea></div>
+    </div>
+    <div class="drow">
+      <div class="dfield"><label>หมายเหตุ (ไม่บังคับ)</label><textarea id="b-note" style="min-height:50px;" placeholder="เช่น กรุณาชำระภายในวันที่กำหนด หากมีข้อสงสัยติดต่อ 080-276-7555"></textarea></div>
+    </div>
+    <div class="drow">
+      <div class="dfield"><label>ผู้วางบิล</label><input id="b-lawyer" value="ว่าที่ ร.ต.วีรวัชร์ รักษ์นิธิวงศ์"></div>
+    </div>
+    <div class="row-end">
+      <button class="btn ghost sm" onclick="closeDocModal('billing')">ยกเลิก</button>
+      <button class="btn sm" onclick="confirmBilling()">พิมพ์ใบวางบิล</button>
+    </div>
+  </div>
+</div>
+
 <div class="docmodal-bg" id="contractModalBg">
   <div class="docmodal wide">
     <h3>สัญญาจ้างทำของ (ว่าความ)</h3>
@@ -993,10 +1041,11 @@
 <div class="docmodal-bg" id="historyModalBg">
   <div class="docmodal wide">
     <h3>ประวัติเอกสาร</h3>
-    <p class="hint">รายการใบเสนอราคา/ใบเสร็จที่เคยออกทั้งหมด กดพิมพ์ซ้ำเพื่อเปิดเอกสารเดิมอีกครั้ง</p>
+    <p class="hint">รายการใบเสนอราคา/ใบเสร็จ/ใบวางบิล/สัญญาที่เคยออกทั้งหมด กดพิมพ์ซ้ำเพื่อเปิดเอกสารเดิมอีกครั้ง</p>
     <div class="seg" id="hist-tab-seg" style="margin-bottom:14px;">
       <button type="button" data-v="quote" class="on">ใบเสนอราคา</button>
       <button type="button" data-v="receipt">ใบเสร็จรับเงิน</button>
+      <button type="button" data-v="billing">ใบวางบิล</button>
       <button type="button" data-v="contract">สัญญาจ้างทำของ</button>
     </div>
     <div class="searchbar" style="margin-bottom:12px;">
@@ -3065,6 +3114,7 @@ document.getElementById("printMonthly").addEventListener("click", printMonthly);
 const DOC_MODAL_MAP_ = {
   quote:    { bg: "quoteModalBg",    date: "q-date" },
   receipt:  { bg: "receiptModalBg",  date: "r-date" },
+  billing:  { bg: "billingModalBg",  date: "b-date" },
   contract: { bg: "contractModalBg", date: "k-date" },
   history:  { bg: "historyModalBg",  date: null }
 };
@@ -3083,6 +3133,7 @@ function closeDocModal(type){
 }
 document.getElementById("btnQuote").addEventListener("click", ()=>openDocModal("quote"));
 document.getElementById("btnReceipt").addEventListener("click", ()=>openDocModal("receipt"));
+document.getElementById("btnBilling").addEventListener("click", ()=>openDocModal("billing"));
 document.getElementById("btnContract").addEventListener("click", ()=>openDocModal("contract"));
 document.getElementById("btnDocHistory").addEventListener("click", ()=>{
   const s = document.getElementById("search-hist");
@@ -3331,8 +3382,105 @@ async function confirmReceipt(){
   openDocPrintWindow("ใบเสร็จรับเงิน "+result.docNo, body);
 }
 
+/* ---------- ใบวางบิล ---------- */
+
+/** คิดยอดใบวางบิล — คืน {subtotal, vatAmount, total} */
+function billingTotals(items, vatOn){
+  const subtotal  = items.reduce((s,it)=>s+it.amount, 0);
+  const vatAmount = vatOn ? subtotal * 0.07 : 0;
+  return { subtotal, vatAmount, total: subtotal + vatAmount };
+}
+
+/** สร้าง HTML เนื้อหาใบวางบิล จากข้อมูล (ใช้ทั้งตอนสร้างใหม่และพิมพ์ซ้ำจากประวัติ) */
+function buildBillingBody(data){
+  const rows = data.items.map((it,i)=>`<tr>
+      <td class="c">${i+1}</td><td>${esc(it.label)}</td><td class="num">${fmtMoney(it.amount)}</td>
+    </tr>`).join("");
+  const t = billingTotals(data.items, data.vat);
+  const caseLine = [data.caseNo, data.court].filter(Boolean).join(" · ");
+
+  return `
+    <div class="head">
+      <img src="${document.querySelector('header.top .logo').src}">
+      <div class="office">สำนักกฎหมาย วีอาร์ลอว์<small>๕/๒๓ หมู่ที่ ๑๑ ตำบลบางน้ำผึ้ง อำเภอพระประแดง จังหวัดสมุทรปราการ · โทร ๐๘๐๒๗๖๗๕๕๕</small><small>ใบวางบิล · เลขที่ ${data.docNo}</small></div>
+    </div>
+    <div class="doctitle">ใบวางบิล / ใบแจ้งหนี้</div>
+    <div class="meta">
+      <div><b>วางบิลถึง:</b><br>${esc(data.client)}${data.address?"<br>"+esc(data.address).replace(/\n/g,"<br>"):""}${data.contact?"<br>ผู้ติดต่อ "+esc(data.contact):""}</div>
+      <div style="text-align:right;">
+        เลขที่ ${data.docNo}<br>
+        วันที่วางบิล ${docDateThai(data.date)}<br>
+        ${data.dueDate ? "กำหนดชำระ "+docDateThai(data.dueDate) : ""}
+      </div>
+    </div>
+    ${caseLine ? `<div class="terms" style="margin-bottom:10px;"><b>อ้างถึงคดี</b> ${esc(caseLine)}</div>` : ``}
+    <table>
+      <thead><tr><th style="width:8%">ที่</th><th>รายการ</th><th style="width:22%">จำนวนเงิน (บาท)</th></tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot>
+        ${data.vat ? `<tr><td colspan="2" style="text-align:right;">รวมเป็นเงิน</td><td class="num">${fmtMoney(t.subtotal)}</td></tr>
+        <tr><td colspan="2" style="text-align:right;">ภาษีมูลค่าเพิ่ม 7%</td><td class="num">${fmtMoney(t.vatAmount)}</td></tr>` : ``}
+        <tr><td colspan="2" style="text-align:right;">จำนวนเงินที่ต้องชำระ</td><td class="num">${fmtMoney(t.total)} บาท</td></tr>
+      </tfoot>
+    </table>
+    <div class="terms" style="margin-top:10px;">(<b>${esc(thaiBahtText(t.total))}</b>)</div>
+    ${data.payInfo ? `<div class="terms"><b>ช่องทางชำระเงิน</b><br>${esc(data.payInfo).replace(/\n/g,"<br>")}</div>` : ``}
+    ${data.note ? `<div class="terms"><b>หมายเหตุ</b><br>${esc(data.note).replace(/\n/g,"<br>")}</div>` : ``}
+    <div class="signblock2">
+      <div class="signcol">
+        <div class="line"></div>
+        ผู้รับวางบิล<br>วันที่ ..................................
+      </div>
+      <div class="signcol">
+        <div class="line"></div>
+        ${esc(data.lawyer)}<br>ผู้วางบิล
+      </div>
+    </div>
+  `;
+}
+
+async function confirmBilling(){
+  const client   = document.getElementById("b-client").value.trim();
+  const dateISO  = document.getElementById("b-date").value || todayISO();
+  const addr     = document.getElementById("b-addr").value.trim();
+  const contact  = document.getElementById("b-contact").value.trim();
+  const caseNo   = document.getElementById("b-caseno").value.trim();
+  const court    = document.getElementById("b-court").value.trim();
+  const items    = parseDocItems(document.getElementById("b-items").value);
+  const vatOn    = document.getElementById("b-vat").checked;
+  const payInfo  = document.getElementById("b-payinfo").value.trim();
+  const note     = document.getElementById("b-note").value.trim();
+  const lawyer   = document.getElementById("b-lawyer").value.trim();
+  const creditDays = parseInt(document.getElementById("b-creditdays").value,10);
+
+  if(!client){ toast("กรุณาใส่ชื่อผู้รับวางบิลก่อนค่ะ"); return; }
+  if(!items){ toast("กรุณาใส่รายการ+จำนวนเงินอย่างน้อย 1 รายการ (คั่นด้วย :)"); return; }
+
+  const days = isNaN(creditDays) ? 15 : creditDays;
+  const dueD = new Date(dateISO+"T00:00:00");
+  dueD.setDate(dueD.getDate() + days);
+  const dueDate = toISO(dueD.getFullYear(), dueD.getMonth(), dueD.getDate());
+
+  const t = billingTotals(items, vatOn);
+  const record = {
+    date:dateISO, dueDate, client, address:addr, contact, caseNo, court,
+    items, vat:vatOn,
+    subtotal:t.subtotal, vatAmount:t.vatAmount, total:t.total,
+    payInfo, note, lawyer, status:"ยังไม่ชำระ"
+  };
+
+  let result;
+  try{ result = await api("saveBilling", {record}); }
+  catch(e){ toast("บันทึกไม่สำเร็จ: "+e.message); return; }
+  histBillingsCache = null;
+
+  const body = buildBillingBody(Object.assign({}, record, {docNo: result.docNo}));
+  closeDocModal("billing");
+  openDocPrintWindow("ใบวางบิล "+result.docNo, body);
+}
+
 // เก็บข้อมูลประวัติที่โหลดมาแล้วไว้ในเครื่อง กันโหลดซ้ำทุกครั้งที่พิมพ์
-let histQuotesCache = null, histReceiptsCache = null, histContractsCache = null;
+let histQuotesCache = null, histReceiptsCache = null, histContractsCache = null, histBillingsCache = null;
 
 const HIST_CFG_ = {
   quote:    { action:"listQuotes",    key:"quotes",    cache:()=>histQuotesCache,    setCache:v=>histQuotesCache=v,
@@ -3341,6 +3489,10 @@ const HIST_CFG_ = {
   receipt:  { action:"listReceipts",  key:"receipts",  cache:()=>histReceiptsCache,  setCache:v=>histReceiptsCache=v,
               label:"ใบเสร็จ", nameOf:d=>d.payer, subOf:d=>docDateThai(d.date) + " · " + d.method,
               build:buildReceiptBody, title:"ใบเสร็จรับเงิน " },
+  billing:  { action:"listBillings",  key:"billings",  cache:()=>histBillingsCache,  setCache:v=>histBillingsCache=v,
+              label:"ใบวางบิล", nameOf:d=>d.client,
+              subOf:d=>docDateThai(d.date) + (d.dueDate ? " · ครบกำหนด " + docDateThai(d.dueDate) : "") + (d.caseNo ? " · " + d.caseNo : ""),
+              build:buildBillingBody, title:"ใบวางบิล " },
   contract: { action:"listContracts", key:"contracts", cache:()=>histContractsCache, setCache:v=>histContractsCache=v,
               label:"สัญญาจ้างทำของ", nameOf:d=>d.client, subOf:d=>docDateThai(d.date) + " · " + (d.court||""),
               build:buildContractBody, title:"สัญญาจ้างทำของ " }
