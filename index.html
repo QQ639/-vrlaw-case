@@ -586,7 +586,15 @@
   .docmodal fieldset legend{padding:0 6px;font-size:13px;font-weight:700;color:var(--jade-deep);}
   .hist-row{display:flex;align-items:center;gap:12px;padding:12px 4px;border-bottom:1px solid var(--line-soft);}
   .hist-row:last-child{border-bottom:0;}
-  .hist-row .hi-main{flex:1;min-width:0;}
+  .sumpanel{border:1px solid var(--line-soft);border-radius:10px;padding:10px 12px;margin-bottom:12px;
+            background:rgba(0,0,0,.02);}
+  .sumpanel .sumtop{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:8px;}
+  .sumpanel select{padding:5px 8px;border:1px solid var(--line-soft);border-radius:7px;font:inherit;font-size:13px;}
+  .sumcards{display:flex;flex-wrap:wrap;gap:8px;}
+  .sumcard{flex:1;min-width:120px;border:1px solid var(--line-soft);border-radius:8px;padding:8px 10px;background:#fff;}
+  .sumcard .sc-label{font-size:11.5px;color:var(--ink-muted);}
+  .sumcard .sc-val{font-size:16px;font-weight:700;margin-top:2px;}
+  .sumcard.hi .sc-val{color:var(--jade-deep);}  .hist-row .hi-main{flex:1;min-width:0;}
   .hist-row .hi-no{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--jade-deep);font-weight:600;}
   .hist-row .hi-name{font-size:14px;font-weight:500;margin-top:2px;}
   .hist-row .hi-sub{font-size:12px;color:var(--ink-muted);margin-top:2px;}
@@ -1052,6 +1060,7 @@
       <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
       <input id="search-hist" type="text" placeholder="ค้นหาเลขที่เอกสาร / ชื่อคดี / เลขคดี / คู่ความ / ลูกความ / จำนวนเงิน">
     </div>
+    <div id="hist-summary"></div>
     <div id="hist-list" style="max-height:56vh;overflow-y:auto;">
       <div class="items-hint">กำลังโหลด...</div>
     </div>
@@ -3538,9 +3547,222 @@ function histHaystack(d, cfg){
   return parts.join(" ").toLowerCase();
 }
 
+/* ---------- กล่องรวมเงิน รายเดือน / รายหกเดือน / รายปี ---------- */
+
+// จำโหมดกับช่วงเวลาที่เลือกไว้แยกกันคนละแท็บ
+const PERIOD_STATE_ = {
+  receipt: { mode:"month", key:"" },
+  billing: { mode:"month", key:"" }
+};
+const PERIOD_MODE_LABEL = { month:"รายเดือน", half:"รายหกเดือน", year:"รายปี" };
+
+/** แท็บนี้มีกล่องรวมเงินไหม */
+function hasSummary(tab){ return !!PERIOD_STATE_[tab]; }
+
+/** แปลงวันที่ ISO เป็นรหัสช่วงเวลาตามโหมดที่เลือก */
+function periodKeyOf(dateISO, mode){
+  const s = String(dateISO||"");
+  if(s.length < 7) return "";
+  const y = s.slice(0,4), m = parseInt(s.slice(5,7),10);
+  if(mode === "month") return s.slice(0,7);
+  if(mode === "half")  return y + (m <= 6 ? "-H1" : "-H2");
+  return y;
+}
+
+/** ชื่อช่วงเวลาแบบไทย ปี พ.ศ. เลขไทย */
+function periodLabelOf(key, mode){
+  if(!key) return "ทุกช่วงเวลา";
+  if(mode === "month"){
+    const y = parseInt(key.slice(0,4),10), m = parseInt(key.slice(5,7),10);
+    return TH_MONTHS[m-1] + " " + toThaiNum(y+543);
+  }
+  if(mode === "half"){
+    const y = parseInt(key.slice(0,4),10);
+    return (key.slice(-2) === "H1" ? "มกราคม–มิถุนายน " : "กรกฎาคม–ธันวาคม ") + toThaiNum(y+543);
+  }
+  return "ปี " + toThaiNum(parseInt(key,10)+543);
+}
+
+/** ใบวางบิลฉบับนี้เก็บเงินได้แล้วหรือยัง */
+function isPaid(d){
+  return String((d && d.status) || "").indexOf("ชำระแล้ว") === 0;
+}
+
+/** ค้างชำระ = ยังไม่ยกเลิก และยังไม่ได้รับเงิน */
+function isOutstanding(d){ return !isVoided(d) && !isPaid(d); }
+
+/** ค้างชำระและเลยวันครบกำหนดมาแล้ว */
+function isOverdue(d){
+  return isOutstanding(d) && d.dueDate && String(d.dueDate) < todayISO();
+}
+
+/** รวมยอด ไม่นับฉบับที่ยกเลิกแล้ว */
+function sumDocs(list, filterFn){
+  return list.reduce((s,d)=>{
+    if(isVoided(d)) return s;
+    if(filterFn && !filterFn(d)) return s;
+    return s + (parseFloat(d.total)||0);
+  }, 0);
+}
+
+/** ช่องตัวเลขหนึ่งช่องในกล่องรวมเงิน */
+function sumCard(label, value, cls){
+  return `<div class="sumcard${cls?" "+cls:""}"><div class="sc-label">${esc(label)}</div>
+          <div class="sc-val">${value}</div></div>`;
+}
+
+/** วาดกล่องรวมเงินเหนือรายการเอกสาร */
+function renderSummaryPanel(tab, list, shown){
+  const box = document.getElementById("hist-summary");
+  const st  = PERIOD_STATE_[tab];
+  const keys = [...new Set(list.map(d=>periodKeyOf(d.date, st.mode)).filter(Boolean))].sort().reverse();
+  if(st.key && !keys.includes(st.key)) st.key = "";
+
+  const opts = [`<option value="">ทุกช่วงเวลา</option>`]
+    .concat(keys.map(k=>`<option value="${esc(k)}"${k===st.key?" selected":""}>${esc(periodLabelOf(k, st.mode))}</option>`))
+    .join("");
+
+  const docs   = shown.map(({d})=>d);
+  const live   = docs.filter(d=>!isVoided(d));
+  const voided = docs.length - live.length;
+  const voidNote = voided ? ` <span style="font-size:11.5px;font-weight:400;color:var(--ink-muted);">(ยกเลิก ${voided})</span>` : ``;
+
+  let cards;
+  if(tab === "billing"){
+    const billed  = sumDocs(docs);
+    const paid    = sumDocs(docs, isPaid);
+    const owed    = sumDocs(docs, isOutstanding);
+    const odCount = live.filter(isOverdue).length;
+    cards =
+      sumCard("ช่วงเวลา", `<span style="font-size:14px;">${esc(periodLabelOf(st.key, st.mode))}</span>`) +
+      sumCard("วางบิลไป", `${fmtMoney(billed)}<span style="font-size:11.5px;font-weight:400;color:var(--ink-muted);"> · ${live.length} ใบ${voidNote}</span>`) +
+      sumCard("เก็บได้แล้ว", `${fmtMoney(paid)}<span style="font-size:11.5px;font-weight:400;color:var(--ink-muted);"> · ${live.filter(isPaid).length} ใบ</span>`, "hi") +
+      sumCard("ค้างชำระ", `${fmtMoney(owed)}<span style="font-size:11.5px;font-weight:400;color:${odCount?"#b3261e":"var(--ink-muted)"};"> · ${live.filter(isOutstanding).length} ใบ${odCount?` เกินกำหนด ${odCount}`:``}</span>`);
+  }else{
+    cards =
+      sumCard("ช่วงเวลา", `<span style="font-size:14px;">${esc(periodLabelOf(st.key, st.mode))}</span>`) +
+      sumCard("จำนวนใบเสร็จ", `${live.length} ใบ${voidNote}`) +
+      sumCard("รวมเงิน", `${fmtMoney(sumDocs(docs))} บาท`, "hi");
+  }
+
+  box.innerHTML = `<div class="sumpanel">
+    <div class="sumtop">
+      <div class="seg" id="sum-mode-seg">
+        ${Object.keys(PERIOD_MODE_LABEL).map(m=>
+          `<button type="button" data-m="${m}"${m===st.mode?' class="on"':''}>${PERIOD_MODE_LABEL[m]}</button>`).join("")}
+      </div>
+      <select id="sum-period">${opts}</select>
+      <button class="btn ghost sm" onclick="printPeriodSummary('${tab}')">พิมพ์สรุปยอด</button>
+    </div>
+    <div class="sumcards">${cards}</div>
+  </div>`;
+
+  box.querySelectorAll("#sum-mode-seg button").forEach(b=>{
+    b.addEventListener("click", ()=>{
+      st.mode = b.dataset.m;
+      st.key = "";
+      renderHistList(HIST_CFG_[tab].cache() || [], tab);
+    });
+  });
+  const sel = document.getElementById("sum-period");
+  if(sel) sel.addEventListener("change", ()=>{
+    st.key = sel.value;
+    renderHistList(HIST_CFG_[tab].cache() || [], tab);
+  });
+}
+
+/** พิมพ์ใบสรุปยอดตามช่วงเวลาที่เลือก — ใช้ได้ทั้งใบเสร็จและใบวางบิล */
+function printPeriodSummary(tab){
+  const st = PERIOD_STATE_[tab];
+  const list = (HIST_CFG_[tab].cache() || []).filter(d=>
+    !st.key || periodKeyOf(d.date, st.mode) === st.key);
+  if(!list.length){ toast("ยังไม่มีเอกสารในช่วงเวลานี้"); return; }
+
+  const sorted = list.slice().sort((a,b)=>String(a.date||"").localeCompare(String(b.date||"")));
+  const periodTxt = periodLabelOf(st.key, st.mode);
+  const isBill = (tab === "billing");
+
+  const head = isBill
+    ? `<th style="width:5%">ที่</th><th style="width:14%">เลขที่</th><th style="width:15%">วันที่วางบิล</th>
+       <th>ผู้รับวางบิล</th><th style="width:15%">ครบกำหนด</th><th style="width:13%">สถานะ</th><th style="width:14%">จำนวนเงิน</th>`
+    : `<th style="width:6%">ที่</th><th style="width:16%">เลขที่</th><th style="width:20%">วันที่</th>
+       <th>ผู้ชำระเงิน</th><th style="width:14%">วิธีชำระ</th><th style="width:16%">จำนวนเงิน</th>`;
+
+  const rows = sorted.map((d,i)=>{
+    const dead = isVoided(d);
+    const cells = isBill
+      ? `<td>${esc(d.client||"")}</td>
+         <td class="c">${d.dueDate?docDateThai(d.dueDate):"—"}</td>
+         <td class="c">${dead?"ยกเลิก":(isPaid(d)?"ชำระแล้ว":(isOverdue(d)?"เกินกำหนด":"ค้างชำระ"))}</td>`
+      : `<td>${esc(d.payer||"")}</td><td class="c">${esc(d.method||"")}</td>`;
+    return `<tr${dead?' style="color:#b3261e;"':''}>
+      <td class="c">${i+1}</td><td class="c">${esc(d.docNo||"")}</td><td>${docDateThai(d.date)}</td>
+      ${cells}<td class="num">${dead?"—":fmtMoney(d.total)}</td>
+    </tr>`;
+  }).join("");
+
+  const span = isBill ? 6 : 5;
+  const foot = isBill
+    ? `<tr><td colspan="${span}" style="text-align:right;">รวมวางบิล</td><td class="num">${fmtMoney(sumDocs(sorted))} บาท</td></tr>
+       <tr><td colspan="${span}" style="text-align:right;">เก็บได้แล้ว</td><td class="num">${fmtMoney(sumDocs(sorted, isPaid))} บาท</td></tr>
+       <tr><td colspan="${span}" style="text-align:right;">คงค้างชำระ</td><td class="num">${fmtMoney(sumDocs(sorted, isOutstanding))} บาท</td></tr>`
+    : `<tr><td colspan="${span}" style="text-align:right;">รวมรับทั้งสิ้น (ไม่นับฉบับที่ยกเลิก)</td>
+       <td class="num">${fmtMoney(sumDocs(sorted))} บาท</td></tr>`;
+
+  const bahtLine = isBill ? sumDocs(sorted, isOutstanding) : sumDocs(sorted);
+  const bahtNote = isBill ? "ยอดคงค้าง" : "รวมรับ";
+
+  const body = `
+    <div class="head">
+      <img src="${document.querySelector('header.top .logo').src}">
+      <div class="office">สำนักกฎหมาย วีอาร์ลอว์<small>๕/๒๓ หมู่ที่ ๑๑ ตำบลบางน้ำผึ้ง อำเภอพระประแดง จังหวัดสมุทรปราการ · โทร ๐๘๐๒๗๖๗๕๕๕</small></div>
+    </div>
+    <div class="doctitle">${isBill?"สรุปยอดวางบิล":"สรุปยอดรับเงิน"} (${esc(PERIOD_MODE_LABEL[st.mode])})</div>
+    <div class="meta">
+      <div><b>ช่วงเวลา:</b> ${esc(periodTxt)}</div>
+      <div style="text-align:right;">พิมพ์เมื่อ ${docDateThai(todayISO())}</div>
+    </div>
+    <table>
+      <thead><tr>${head}</tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot>${foot}</tfoot>
+    </table>
+    <div class="terms" style="margin-top:10px;">${esc(bahtNote)} (<b>${esc(thaiBahtText(bahtLine))}</b>)</div>
+    <div class="signblock2">
+      <div class="signcol"><div class="line"></div>ผู้จัดทำ<br>วันที่ ..................................</div>
+      <div class="signcol"><div class="line"></div>ผู้ตรวจสอบ<br>วันที่ ..................................</div>
+    </div>
+  `;
+  openDocPrintWindow((isBill?"สรุปยอดวางบิล ":"สรุปยอดรับเงิน ") + periodTxt, body);
+}
+
+/** รับชำระ / ยกเลิกการรับชำระ ใบวางบิล */
+async function togglePaid(idx){
+  const cfg = HIST_CFG_.billing;
+  const d = cfg.cache()[idx];
+  if(!d) return;
+
+  if(isPaid(d)){
+    if(!confirm(`ย้อนสถานะใบวางบิล ${d.docNo} กลับเป็น "ยังไม่ชำระ" ?`)) return;
+    try{ await api("setBillingPaid", {id:d.id, unpay:true}); toast(`ย้อนสถานะ ${d.docNo} แล้ว`); }
+    catch(e){ toast("ไม่สำเร็จ: "+e.message); return; }
+  }else{
+    const ans = prompt(`รับชำระใบวางบิล ${d.docNo}\nยอด ${fmtMoney(d.total)} บาท\n\nใส่วันที่รับเงิน (ปปปป-ดด-วว)`, todayISO());
+    if(ans === null) return;
+    const paidDate = ans.trim() || todayISO();
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(paidDate)){ toast("รูปแบบวันที่ไม่ถูกต้อง ต้องเป็น ปปปป-ดด-วว"); return; }
+    try{ await api("setBillingPaid", {id:d.id, paidDate}); toast(`รับชำระ ${d.docNo} แล้ว`); }
+    catch(e){ toast("ไม่สำเร็จ: "+e.message); return; }
+  }
+  cfg.setCache(null);
+  loadDocHistory("billing");
+}
+
 function renderHistList(list, tab){
   const box = document.getElementById("hist-list");
+  const sum = document.getElementById("hist-summary");
   const cfg = HIST_CFG_[tab];
+  if(sum) sum.innerHTML = "";
   if(!list || !list.length){
     box.innerHTML = `<div class="items-hint">ยังไม่เคยออก${cfg.label}เลยค่ะ</div>`;
     return;
@@ -3548,21 +3770,34 @@ function renderHistList(list, tab){
   const box2 = document.getElementById("search-hist");
   const q = (box2 ? box2.value : "").trim().toLowerCase();
   const rows = list.map((d,i)=>({d,i})).filter(({d})=>{
+    const st = PERIOD_STATE_[tab];
+    if(st && st.key && periodKeyOf(d.date, st.mode) !== st.key) return false;
     if(!q) return true;
     return histHaystack(d, cfg).includes(q);
   });
+  if(hasSummary(tab)) renderSummaryPanel(tab, list, rows);
   if(!rows.length){
-    box.innerHTML = `<div class="items-hint">ไม่พบ${cfg.label}ที่ตรงกับ "${esc(q)}"</div>`;
+    box.innerHTML = `<div class="items-hint">ไม่พบ${cfg.label}${q?` ที่ตรงกับ "${esc(q)}"`:"ในช่วงเวลานี้"}</div>`;
     return;
   }
   box.innerHTML = rows.map(({d,i})=>{
+    let badge = "";
+    if(isVoided(d))      badge = ' · <span style="color:#b3261e;">ยกเลิกแล้ว</span>';
+    else if(isPaid(d))   badge = ' · <span style="color:#1a6b5c;">ชำระแล้ว' + (d.paidDate ? " " + docDateThai(d.paidDate) : "") + '</span>';
+    else if(isOverdue(d))badge = ' · <span style="color:#b3261e;">เกินกำหนด</span>';
+
+    const payBtn = (tab === "billing" && !isVoided(d))
+      ? `<button class="btn ghost sm" onclick="togglePaid(${i})">${isPaid(d)?"ย้อนสถานะ":"รับชำระ"}</button>`
+      : "";
+
     return `<div class="hist-row"${isVoided(d)?' style="opacity:.55;"':''}>
       <div class="hi-main">
-        <div class="hi-no">${esc(d.docNo)}${isVoided(d)?' · <span style="color:#b3261e;">ยกเลิกแล้ว</span>':''}</div>
+        <div class="hi-no">${esc(d.docNo)}${badge}</div>
         <div class="hi-name">${esc(cfg.nameOf(d))}</div>
         <div class="hi-sub">${esc(cfg.subOf(d))}</div>
       </div>
       <div class="hi-amt">${fmtMoney(d.total)} บาท</div>
+      ${payBtn}
       <button class="btn ghost sm" onclick="reprintDoc('${tab}', ${i})">พิมพ์ซ้ำ</button>
       <button class="btn ghost sm" onclick="voidDoc('${tab}', ${i})"${isVoided(d)?" disabled":""}>ยกเลิก</button>
       <button class="btn ghost sm" onclick="deleteDoc('${tab}', ${i})">ลบ</button>
