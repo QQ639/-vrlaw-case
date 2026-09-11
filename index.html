@@ -630,8 +630,8 @@
   </header>
 
   <div class="syncbar" id="syncbar">
-    <span class="sync-dot" id="sync-dot"></span>
-    <span id="sync-text">—</span>
+    <span class="sync-dot" id="sync-dot" onclick="showApiTimings()" style="cursor:pointer;"></span>
+    <span id="sync-text" onclick="showApiTimings()" title="แตะเพื่อดูเวลาตอบสนองของเซิร์ฟเวอร์" style="cursor:pointer;">—</span>
     <span class="sync-spacer"></span>
     <button class="linkbtn" id="btnQuote">ใบเสนอราคา</button>
     <button class="linkbtn" id="btnReceipt">ใบเสร็จรับเงิน</button>
@@ -828,6 +828,12 @@
       <div class="dfield"><label>อายุใบเสนอราคา (วัน)</label><input type="number" id="q-validdays" value="30" min="1"></div>
     </div>
     <div class="drow">
+      <div class="dfield"><label>ผูกกับสำนวนคดี (ไม่บังคับ)</label>
+        <select id="q-case" onchange="onDocCasePick('q')"><option value="">— ไม่ผูกกับสำนวน —</option></select>
+        <div class="items-hint">เลือกแล้วระบบเติมชื่อลูกความ/เลขคดี/ศาลให้ และเอกสารจะไปโผล่ในหน้าสำนวนนั้น</div>
+      </div>
+    </div>
+    <div class="drow">
       <div class="dfield"><label>ชื่อลูกค้า / ผู้รับใบเสนอราคา</label><input id="q-client" placeholder="เช่น บริษัท เอบีซี จำกัด"></div>
     </div>
     <div class="drow">
@@ -889,6 +895,12 @@
       <div class="dfield"><label>เลขที่บัญชี</label><input id="r-bank-acc" placeholder="เช่น 123-4-56789-0"></div>
     </div>
     <div class="drow">
+      <div class="dfield"><label>ผูกกับสำนวนคดี (ไม่บังคับ)</label>
+        <select id="r-case" onchange="onDocCasePick('r')"><option value="">— ไม่ผูกกับสำนวน —</option></select>
+        <div class="items-hint">เลือกแล้วระบบเติมชื่อลูกความ/เลขคดี/ศาลให้ และเอกสารจะไปโผล่ในหน้าสำนวนนั้น</div>
+      </div>
+    </div>
+    <div class="drow">
       <div class="dfield"><label>ได้รับเงินจาก</label><input id="r-payer" placeholder="เช่น นายสมชาย ใจดี"></div>
     </div>
     <div class="drow">
@@ -924,6 +936,12 @@
     </div>
     <div class="drow">
       <div class="dfield"><label>ผู้ติดต่อ / แผนก (ไม่บังคับ)</label><input id="b-contact" placeholder="เช่น คุณสมหญิง ฝ่ายบัญชี โทร 08x-xxx-xxxx"></div>
+    </div>
+    <div class="drow">
+      <div class="dfield"><label>ผูกกับสำนวนคดี (ไม่บังคับ)</label>
+        <select id="b-case" onchange="onDocCasePick('b')"><option value="">— ไม่ผูกกับสำนวน —</option></select>
+        <div class="items-hint">เลือกแล้วระบบเติมชื่อลูกความ/เลขคดี/ศาลให้ และเอกสารจะไปโผล่ในหน้าสำนวนนั้น</div>
+      </div>
     </div>
     <div class="drow">
       <div class="dfield"><label>เลขคดี (ไม่บังคับ)</label><input id="b-caseno" placeholder="เช่น พ.88/2569"></div>
@@ -973,6 +991,12 @@
 
     <fieldset>
       <legend>รายละเอียดคดี</legend>
+      <div class="drow">
+        <div class="dfield"><label>ผูกกับสำนวนคดี (ไม่บังคับ)</label>
+          <select id="k-case" onchange="onDocCasePick('k')"><option value="">— ไม่ผูกกับสำนวน —</option></select>
+          <div class="items-hint">เลือกแล้วระบบเติมเลขคดี ศาล โจทก์ จำเลย ให้อัตโนมัติ</div>
+        </div>
+      </div>
       <div class="drow">
         <div class="dfield"><label>เลขคดี (ถ้ามี)</label><input id="k-caseno"></div>
         <div class="dfield"><label>ศาล</label><input id="k-court" placeholder="เช่น ศาลแขวงสมุทรปราการ"></div>
@@ -1196,10 +1220,50 @@ let lastFetchAt = 0;
 
 /* ---- คุยกับเซิร์ฟเวอร์ ----
    ใช้ Content-Type: text/plain เพื่อเลี่ยง CORS preflight ที่ Apps Script ไม่รองรับ */
+/* ---------- ตัวจับเวลาการเรียกเซิร์ฟเวอร์ ---------- */
+// เก็บผลล่าสุด 30 ครั้ง ไว้ดูว่าเวลาหมดไปกับคำสั่งไหน แตะแถบสถานะเพื่อดู
+const apiTimings = [];
+function noteTiming(action, ms, attempts, ok){
+  apiTimings.push({ action, ms: Math.round(ms), attempts, ok, at: new Date() });
+  if(apiTimings.length > 30) apiTimings.shift();
+  if(ms > 4000) console.warn(`[api] ${action} ใช้เวลา ${Math.round(ms)} ms`);
+  else console.debug(`[api] ${action} ${Math.round(ms)} ms`);
+}
+
+/** สรุปเวลาที่ใช้ไปกับเซิร์ฟเวอร์ — แตะแถบสถานะเพื่อเปิด */
+function showApiTimings(){
+  if(!apiTimings.length){ toast("ยังไม่มีข้อมูลเวลา ลองโหลดข้อมูลสักครั้งก่อน"); return; }
+  const byAction = {};
+  apiTimings.forEach(t=>{
+    const b = byAction[t.action] || (byAction[t.action] = { n:0, sum:0, max:0 });
+    b.n++; b.sum += t.ms; b.max = Math.max(b.max, t.ms);
+  });
+  const rows = Object.entries(byAction)
+    .sort((a,b)=> b[1].sum/b[1].n - a[1].sum/a[1].n)
+    .map(([a,b])=>`<tr><td>${esc(a)}</td><td class="num">${b.n}</td>
+      <td class="num">${Math.round(b.sum/b.n)}</td><td class="num">${b.max}</td></tr>`).join("");
+  const last = apiTimings.slice(-10).reverse()
+    .map(t=>`<tr><td>${esc(t.action)}</td><td class="num">${t.ms}</td>
+      <td class="num">${t.attempts>1?t.attempts+" ครั้ง":"—"}</td>
+      <td class="num">${t.ok?"สำเร็จ":"ล้มเหลว"}</td></tr>`).join("");
+
+  openDocPrintWindow("เวลาตอบสนองของเซิร์ฟเวอร์", `
+    <div class="doctitle">เวลาตอบสนองของเซิร์ฟเวอร์ (มิลลิวินาที)</div>
+    <div class="terms">เกิน 4000 ms ถือว่าช้าผิดปกติ · ครั้งแรกหลังไม่ได้ใช้งานนาน จะช้ากว่าปกติเพราะ Apps Script ต้องปลุกเครื่อง</div>
+    <table><thead><tr><th>คำสั่ง</th><th style="width:12%">จำนวนครั้ง</th>
+      <th style="width:16%">เฉลี่ย</th><th style="width:16%">ช้าสุด</th></tr></thead>
+      <tbody>${rows}</tbody></table>
+    <div class="doctitle" style="font-size:14pt;margin-top:18px;">10 ครั้งล่าสุด</div>
+    <table><thead><tr><th>คำสั่ง</th><th style="width:16%">เวลา</th>
+      <th style="width:16%">ลองใหม่</th><th style="width:16%">ผล</th></tr></thead>
+      <tbody>${last}</tbody></table>`);
+}
+
 async function api(action, payload){
   const body = Object.assign({ action, passcode: session.passcode, user: session.user }, payload||{});
   const MAX_TRY = 3;
   let lastErr = null;
+  const t0 = performance.now();
 
   for(let attempt = 1; attempt <= MAX_TRY; attempt++){
     try{
@@ -1237,15 +1301,18 @@ async function api(action, payload){
         throw err;
       }
       if(attempt > 1) toast("เชื่อมต่อสำเร็จหลังลองใหม่ครั้งที่ "+attempt);
+      noteTiming(action, performance.now() - t0, attempt, true);
       return data;
 
     }catch(err){
       // เน็ตสะดุด — ลองใหม่
       const isNetwork = (err instanceof TypeError) || /fetch|network|Failed to fetch/i.test(err.message||"");
       if(isNetwork && attempt < MAX_TRY){ lastErr = err; await sleep(600 * attempt); continue; }
+      noteTiming(action, performance.now() - t0, attempt, false);
       throw err;
     }
   }
+  noteTiming(action, performance.now() - t0, MAX_TRY, false);
   throw lastErr || new Error("เชื่อมต่อไม่สำเร็จหลังลอง "+MAX_TRY+" ครั้ง");
 }
 function sleep(ms){ return new Promise(r=>setTimeout(r, ms)); }
@@ -1329,12 +1396,35 @@ async function persistDelete(id){
 /* ---- ดึงข้อมูลทั้งหมดจากเซิร์ฟเวอร์ ---- */
 async function fetchAll(){
   const r = await api("list");
-  cases = r.cases.map(c=>normalizeCase(Object.assign({editLog:[]}, c)));
+  applyCases(r.cases);
+}
+
+/** รับรายการสำนวนที่โหลดมา แล้วอัปเดตสถานะแอป */
+function applyCases(list){
+  cases = (list||[]).map(c=>normalizeCase(Object.assign({editLog:[]}, c)));
   lastFetchAt = Date.now();
   readOnly = false;
   save();
   updateCounts();
   setSyncState("ok");
+}
+
+/**
+ * โหลดทุกอย่างที่ต้องใช้ตอนเปิดแอปในรอบเดียว
+ * Apps Script หนึ่งรอบกินเวลาหลายวินาที (ต้อง redirect สองต่อ + ปลุกเครื่อง)
+ * ยุบสี่รอบเหลือรอบเดียวจึงช่วยได้มากกว่าการไปเร่งฝั่งชีต
+ */
+async function bootLoad(){
+  const r = await api("boot");
+  session.user = r.user || session.user;
+  session.role = r.role || "user";
+  applyRolePermissions();
+  saveSession();
+  applyCases(r.cases);
+  events = (r.events||[]).filter(e=>e.date);
+  updateEventCount();
+  if(r.billings) histBillingsCache = r.billings;
+  return r;
 }
 
 // ============ ตัวช่วย ============
@@ -1960,7 +2050,7 @@ function openCase(id){
           </div>
           <div class="field"><label>ขยายอุทธรณ์ถึง (ถ้าศาลอนุญาต)</label>
             <div class="tdp" data-tdp>
-              <input type="text" class="tdp-display" readonly placeholder="เว้นว่าง = นับ ๑ เดือน">
+              <input type="text" class="tdp-display" readonly placeholder="เว้นว่าง = นับ 1 เดือน">
               <input type="hidden" class="tdp-value" id="f-appealExtend" value="${esc(c.appealExtend)}">
               <div class="tdp-pop"></div>
             </div>
@@ -1978,7 +2068,7 @@ function openCase(id){
           </div>
           <div class="field"><label>ขยายฎีกาถึง (ถ้าศาลอนุญาต)</label>
             <div class="tdp" data-tdp>
-              <input type="text" class="tdp-display" readonly placeholder="เว้นว่าง = นับ ๑ เดือน">
+              <input type="text" class="tdp-display" readonly placeholder="เว้นว่าง = นับ 1 เดือน">
               <input type="hidden" class="tdp-value" id="f-supremeExtend" value="${esc(c.supremeExtend)}">
               <div class="tdp-pop"></div>
             </div>
@@ -1993,6 +2083,9 @@ function openCase(id){
           <button class="btn" id="saveBtn" onclick="saveDetail('${esc(c.id)}')">บันทึกการเปลี่ยนแปลง</button>
           ${(!TEAM_MODE || session.role==="admin") ? `<button class="btn danger sm" onclick="deleteCase('${esc(c.id)}')">ลบสำนวน</button>` : ""}
         </div>
+
+        <div class="section-label">เอกสารการเงินของสำนวนนี้</div>
+        <div id="caseDocsBox"><div class="items-hint">กำลังรวบรวม…</div></div>
 
         <div class="section-label">ประวัติการแก้ไข</div>
         <div id="editLogBox">${logList}</div>
@@ -2014,7 +2107,82 @@ function openCase(id){
   initDatePickers(document.getElementById("detailContainer"));
   showView("detail");
   renderQR(url);
+  renderCaseDocs(id);
   if(TEAM_MODE && !readOnly) loadServerLog(id);
+}
+
+/* ---------- เอกสารการเงินที่ผูกกับสำนวนนี้ ---------- */
+
+/** โหลดรายการเอกสารทุกชนิดมาเก็บไว้ในเครื่อง (ครั้งเดียวพอ) */
+async function ensureDocCaches(){
+  const tabs = ["quote","receipt","billing","contract"];
+  const missing = tabs.filter(t=>!HIST_CFG_[t].cache());
+  if(!missing.length) return;
+
+  // ดึงทั้งสี่ชนิดในรอบเดียว แทนการยิงสี่คำสั่ง — Apps Script หนึ่งรอบกินเวลาหลายวินาที
+  try{
+    const r = await api("listAllDocs");
+    tabs.forEach(t=>{ const cfg = HIST_CFG_[t]; if(!cfg.cache()) cfg.setCache(r[cfg.key] || []); });
+  }catch(e){
+    missing.forEach(t=>HIST_CFG_[t].setCache([]));   // ไม่มีสิทธิ์ดู หรือยังไม่มีชีต
+  }
+}
+
+/** แสดงใบเสนอราคา/ใบวางบิล/ใบเสร็จ/สัญญา ที่ผูกกับสำนวนนี้ พร้อมยอดรวม */
+async function renderCaseDocs(caseId){
+  const box = document.getElementById("caseDocsBox");
+  if(!box) return;
+  if(TEAM_MODE && session.role !== "admin"){
+    box.innerHTML = `<div class="items-hint">เฉพาะผู้ดูแลระบบจึงจะเห็นเอกสารการเงิน</div>`;
+    return;
+  }
+
+  await ensureDocCaches();
+  if(!document.getElementById("caseDocsBox")) return;   // ผู้ใช้เปิดหน้าอื่นไปแล้ว
+
+  const pick = tab => (HIST_CFG_[tab].cache()||[]).filter(d=>d.caseId === caseId);
+  const quotes = pick("quote"), bills = pick("billing"),
+        rcpts  = pick("receipt"), ctrs = pick("contract");
+  const all = quotes.length + bills.length + rcpts.length + ctrs.length;
+  if(!all){
+    box.innerHTML = `<div class="items-hint">ยังไม่มีเอกสารที่ผูกกับสำนวนนี้ — ตอนออกใบเสนอราคา/ใบวางบิล/ใบเสร็จ ให้เลือกสำนวนนี้ในช่อง “ผูกกับสำนวนคดี”</div>`;
+    return;
+  }
+
+  const billed = bills.reduce((t,d)=>t+(isVoided(d)?0:(parseFloat(d.total)||0)), 0);
+  const paid   = bills.reduce((t,d)=>t+paidOf(d), 0);
+  const owed   = bills.reduce((t,d)=>t+owedOf(d), 0);
+  const recv   = rcpts.reduce((t,d)=>t+(isVoided(d)?0:(parseFloat(d.total)||0)), 0);
+
+  const line = (d, kind)=>{
+    let note = "";
+    if(kind === "billing"){
+      note = isVoided(d) ? "ยกเลิก"
+        : (isPaid(d) ? "ชำระแล้ว"
+        : (isPartlyPaid(d) ? `ค้าง ${fmtMoney(owedOf(d))}`
+        : (isOverdue(d) ? "เกินกำหนด" : "ค้างชำระ")));
+    }else if(isVoided(d)) note = "ยกเลิก";
+    return `<div class="hist-row" style="padding:8px 4px;${isVoided(d)?"opacity:.55;":""}">
+      <div class="hi-main">
+        <div class="hi-no">${esc(d.docNo)}${note?` · ${esc(note)}`:""}</div>
+        <div class="hi-sub">${docDateThai(d.date)} · ${esc(HIST_CFG_[kind].label)}</div>
+      </div>
+      <div class="hi-amt">${fmtMoney(d.total)} บาท</div>
+    </div>`;
+  };
+
+  box.innerHTML = `
+    <div class="sumcards" style="margin-bottom:10px;">
+      ${sumCard("วางบิลไป", fmtMoney(billed))}
+      ${sumCard("เก็บได้แล้ว", fmtMoney(paid), "hi")}
+      ${sumCard("ค้างชำระ", fmtMoney(owed))}
+      ${sumCard("ออกใบเสร็จรวม", fmtMoney(recv))}
+    </div>
+    ${ctrs.map(d=>line(d,"contract")).join("")}
+    ${quotes.map(d=>line(d,"quote")).join("")}
+    ${bills.map(d=>line(d,"billing")).join("")}
+    ${rcpts.map(d=>line(d,"receipt")).join("")}
+    <div class="items-hint" style="margin-top:8px;">แก้ไข พิมพ์ซ้ำ หรือรับชำระ ได้ที่ปุ่มประวัติเอกสารด้านบน</div>`;
 }
 
 /* ดึงประวัติการแก้ไขของสำนวนนี้จากชีตกลาง (เห็นการแก้ไขของทุกคนในทีม) */
@@ -2312,11 +2480,17 @@ function downloadQR(id){
 /* ============================================================
    พิมพ์หน้าปกสำนวน — เติมข้อมูลที่มีในระบบ ช่องที่ยังไม่มีเว้นไว้ให้เขียนมือ
    ============================================================ */
-const TH_DIGITS = ["๐","๑","๒","๓","๔","๕","๖","๗","๘","๙"];
+// เลิกใช้เลขไทยในตัวเลขทั่วไปแล้ว เหลือไว้เฉพาะหัวกระดาษซึ่งพิมพ์ตายตัว
+// ถ้าวันหลังอยากกลับไปใช้เลขไทย แก้ที่ toThaiNum() ที่เดียว
+/**
+ * เดิมฟังก์ชันนี้แปลงเป็นเลขไทย ตอนนี้คืนเลขอารบิกตามเดิม
+ * คงชื่อฟังก์ชันไว้เพราะถูกเรียกจากหลายสิบจุด แก้ที่เดียวจบ
+ * หัวกระดาษ (ที่อยู่ เบอร์โทร) เขียนเลขไทยไว้ตายตัว จึงไม่ผ่านฟังก์ชันนี้
+ */
 function toThaiNum(v){
-  return String(v==null?"":v).replace(/[0-9]/g, d=>TH_DIGITS[+d]);
+  return String(v==null?"":v);
 }
-/** วันที่แบบไทยเต็ม เลขไทย เช่น "๑๐ เมษายน ๒๕๖๙" */
+/** วันที่แบบไทยเต็ม เช่น "10 เมษายน 2569" */
 function thaiFullDate(iso){
   if(!iso) return "";
   const d = new Date(iso);
@@ -2930,8 +3104,7 @@ function printSummary(){
     <div id="stage"><table>${theadTpl}<tbody id="src">${trs}</tbody></table></div>
     <script>
     (function(){
-      var TH = ["๐","๑","๒","๓","๔","๕","๖","๗","๘","๙"];
-      function th(n){ return String(n).replace(/[0-9]/g, function(d){ return TH[+d]; }); }
+      function th(n){ return String(n); }   /* ใช้เลขอารบิกทั้งหมด */
 
       var pxPerMm = document.getElementById("probe").getBoundingClientRect().height / 100;
       var LIMIT   = 275 * pxPerMm;        /* A3 สูง 297 หักขอบบนล่าง 20 เผื่อไว้อีก 2 */
@@ -3074,8 +3247,7 @@ function printMonthly(){
     <div id="stage"><table>${theadTpl}<tbody id="src">${trs}</tbody></table></div>
     <script>
     (function(){
-      var TH = ["๐","๑","๒","๓","๔","๕","๖","๗","๘","๙"];
-      function th(n){ return String(n).replace(/[0-9]/g, function(d){ return TH[+d]; }); }
+      function th(n){ return String(n); }   /* ใช้เลขอารบิกทั้งหมด */
 
       var pxPerMm = document.getElementById("probe").getBoundingClientRect().height / 100;
       var LIMIT   = 275 * pxPerMm;        /* A3 สูง 297 หักขอบบนล่าง 20 เผื่อไว้อีก 2 */
@@ -3127,6 +3299,113 @@ const DOC_MODAL_MAP_ = {
   contract: { bg: "contractModalBg", date: "k-date" },
   history:  { bg: "historyModalBg",  date: null }
 };
+/* ---------- ผูกเอกสารกับสำนวนคดี ---------- */
+
+// เอกสารที่กำลังจะออก ถูกสร้างต่อจากเอกสารใบไหน (ใช้ตอนออกบิลจากใบเสนอราคา / ออกใบเสร็จจากบิล)
+let docSource = { quote:null, billing:null, receipt:null };
+
+/** ข้อความสั้น ๆ แทนสำนวนหนึ่งเรื่อง ใช้ใน dropdown และเก็บลงชีตเป็น caseRef */
+function caseRefText(c){
+  return [c.seqNo||c.id, c.caseNumber, partiesDisplay(c)].filter(Boolean).join(" · ");
+}
+
+/** เติมรายชื่อสำนวนลงช่องเลือกของเอกสารทุกชนิด */
+function fillCasePickers(){
+  const opts = `<option value="">— ไม่ผูกกับสำนวน —</option>` + cases
+    .slice()
+    .sort((a,b)=> seqValue(a) - seqValue(b))
+    .map(c=>`<option value="${esc(c.id)}">${esc(caseRefText(c))}</option>`).join("");
+  ["q","r","b","k"].forEach(pfx=>{
+    const sel = document.getElementById(pfx+"-case");
+    if(!sel) return;
+    const keep = sel.value;
+    sel.innerHTML = opts;
+    if(keep) sel.value = keep;
+  });
+}
+
+/** เลือกสำนวนแล้วเติมช่องอื่นให้อัตโนมัติ — เติมเฉพาะช่องที่ยังว่าง จะได้ไม่ทับที่พิมพ์ไว้ */
+function onDocCasePick(pfx){
+  const sel = document.getElementById(pfx+"-case");
+  const c = cases.find(x=>x.id === sel.value);
+  if(!c) return;
+  const put = (id,val)=>{ const el=document.getElementById(id); if(el && !el.value && val) el.value = val; };
+
+  if(pfx === "q"){ put("q-client", c.clientName); }
+  if(pfx === "r"){ put("r-payer", c.clientName); }
+  if(pfx === "b"){
+    put("b-client", c.clientName);
+    put("b-caseno", c.caseNumber);
+    put("b-court", c.court);
+  }
+  if(pfx === "k"){
+    put("k-client", c.clientName);
+    put("k-caseno", c.caseNumber);
+    put("k-court", c.court);
+    put("k-plaintiff", c.plaintiff);
+    put("k-defendant", c.defendant);
+  }
+}
+
+/** ช่องเลือกสำนวน + ข้อความอ้างอิง ของเอกสารที่กำลังจะบันทึก */
+function docCaseFields(pfx){
+  const sel = document.getElementById(pfx+"-case");
+  const id = sel ? sel.value : "";
+  const c = cases.find(x=>x.id === id);
+  return { caseId: id || "", caseRef: c ? caseRefText(c) : "" };
+}
+
+/** ล้างฟอร์มเอกสารก่อนเปิดใหม่ เพื่อไม่ให้ข้อมูลใบก่อนค้าง */
+function clearDocForm(pfx, ids){
+  ids.forEach(id=>{
+    const el = document.getElementById(pfx+"-"+id);
+    if(!el) return;
+    if(el.type === "checkbox") el.checked = false;
+    else if(el.tagName === "SELECT") el.selectedIndex = 0;
+    else el.value = "";
+  });
+}
+
+/* ---------- ออกเอกสารต่อจากใบก่อนหน้า ---------- */
+
+/** ใบเสนอราคา → ใบวางบิล */
+function billFromQuote(idx){
+  const q = HIST_CFG_.quote.cache()[idx];
+  if(!q) return;
+  closeDocModal("history");
+  clearDocForm("b", ["client","addr","contact","caseno","court","items","note","payinfo"]);
+  document.getElementById("b-date").value   = todayISO();
+  document.getElementById("b-client").value = q.client || "";
+  document.getElementById("b-addr").value   = q.address || "";
+  document.getElementById("b-vat").checked  = !!q.vat;
+  document.getElementById("b-items").value  = (q.items||[]).map(it=>`${it.label} : ${it.amount}`).join("\n");
+  document.getElementById("b-note").value   = "อ้างถึงใบเสนอราคาเลขที่ " + (q.docNo||"");
+  docSource.billing = { srcId:q.id, srcDocNo:q.docNo };
+  openDocModal("billing");                       // เติมรายชื่อสำนวนก่อน แล้วค่อยเลือก
+  const sel = document.getElementById("b-case");
+  if(sel) sel.value = q.caseId || "";
+  toast("ดึงข้อมูลจากใบเสนอราคา " + (q.docNo||"") + " มาแล้ว ตรวจดูก่อนพิมพ์นะคะ");
+}
+
+/** ใบวางบิล → ใบเสร็จรับเงิน (ตัดยอดค้างของบิลให้อัตโนมัติเมื่อบันทึก) */
+function receiptFromBilling(idx){
+  const b = HIST_CFG_.billing.cache()[idx];
+  if(!b) return;
+  const owed = Math.max(0, (parseFloat(b.total)||0) - (parseFloat(b.paidAmount)||0));
+  if(owed <= 0){ toast("ใบวางบิลนี้เก็บครบแล้ว"); return; }
+
+  closeDocModal("history");
+  clearDocForm("r", ["payer","items"]);
+  document.getElementById("r-date").value  = todayISO();
+  document.getElementById("r-payer").value = b.client || "";
+  document.getElementById("r-items").value = `ชำระตามใบวางบิลเลขที่ ${b.docNo||""} : ${owed}`;
+  docSource.receipt = { srcId:b.id, srcDocNo:b.docNo };
+  openDocModal("receipt");                       // เติมรายชื่อสำนวนก่อน แล้วค่อยเลือก
+  const sel = document.getElementById("r-case");
+  if(sel) sel.value = b.caseId || "";
+  toast(`ออกใบเสร็จตามบิล ${b.docNo||""} ยอดค้าง ${fmtMoney(owed)} บาท`);
+}
+
 function openDocModal(type){
   const cfg = DOC_MODAL_MAP_[type];
   const bg = document.getElementById(cfg.bg);
@@ -3134,15 +3413,16 @@ function openDocModal(type){
     const dateInput = document.getElementById(cfg.date);
     if(dateInput && !dateInput.value) dateInput.value = todayISO();
   }
+  if(["quote","receipt","billing","contract"].includes(type)) fillCasePickers();
   bg.classList.add("show");
   if(type === "history") loadDocHistory(currentHistTab);
 }
 function closeDocModal(type){
   document.getElementById(DOC_MODAL_MAP_[type].bg).classList.remove("show");
 }
-document.getElementById("btnQuote").addEventListener("click", ()=>openDocModal("quote"));
-document.getElementById("btnReceipt").addEventListener("click", ()=>openDocModal("receipt"));
-document.getElementById("btnBilling").addEventListener("click", ()=>openDocModal("billing"));
+document.getElementById("btnQuote").addEventListener("click", ()=>{ docSource.quote=null; openDocModal("quote"); });
+document.getElementById("btnReceipt").addEventListener("click", ()=>{ docSource.receipt=null; openDocModal("receipt"); });
+document.getElementById("btnBilling").addEventListener("click", ()=>{ docSource.billing=null; openDocModal("billing"); });
 document.getElementById("btnContract").addEventListener("click", ()=>openDocModal("contract"));
 document.getElementById("btnDocHistory").addEventListener("click", ()=>{
   const s = document.getElementById("search-hist");
@@ -3327,6 +3607,8 @@ async function confirmQuote(){
 
   const record = { date:dateISO, validUntil, client, address:addr, scope, items, vat:vatOn, terms, lawyer, total };
 
+  Object.assign(record, docCaseFields("q"));
+
   let result;
   try{ result = await api("saveQuote", {record}); }
   catch(e){ toast("บันทึกไม่สำเร็จ: "+e.message); return; }
@@ -3390,11 +3672,18 @@ async function confirmReceipt(){
 
   const total = items.reduce((s,it)=>s+it.amount,0);
   const record = { date:dateISO, payer, method:methodText, items, lawyer, total };
+  Object.assign(record, docCaseFields("r"));
+  if(docSource.receipt) Object.assign(record, docSource.receipt);
 
   let result;
   try{ result = await api("saveReceipt", {record}); }
   catch(e){ toast("บันทึกไม่สำเร็จ: "+e.message); return; }
   histReceiptsCache = null;
+  if(result.applied && result.applied.ok){
+    histBillingsCache = null;
+    toast(`ตัดยอดใบวางบิล ${result.applied.docNo} แล้ว — ชำระสะสม ${fmtMoney(result.applied.paidAmount)} จาก ${fmtMoney(result.applied.total)} บาท`);
+  }
+  docSource.receipt = null;
 
   const body = buildReceiptBody(Object.assign({}, record, {docNo: result.docNo}));
   closeDocModal("receipt");
@@ -3488,11 +3777,14 @@ async function confirmBilling(){
     subtotal:t.subtotal, vatAmount:t.vatAmount, total:t.total,
     payInfo, note, lawyer, status:"ยังไม่ชำระ"
   };
+  record.caseId = docCaseFields("b").caseId;
+  if(docSource.billing) Object.assign(record, docSource.billing);
 
   let result;
   try{ result = await api("saveBilling", {record}); }
   catch(e){ toast("บันทึกไม่สำเร็จ: "+e.message); return; }
   histBillingsCache = null;
+  docSource.billing = null;
 
   const body = buildBillingBody(Object.assign({}, record, {docNo: result.docNo}));
   closeDocModal("billing");
@@ -3583,13 +3875,32 @@ function periodLabelOf(key, mode){
   return "ปี " + toThaiNum(parseInt(key,10)+543);
 }
 
-/** ใบวางบิลฉบับนี้เก็บเงินได้แล้วหรือยัง */
+/** ใบวางบิลฉบับนี้เก็บเงินครบแล้วหรือยัง */
 function isPaid(d){
   return String((d && d.status) || "").indexOf("ชำระแล้ว") === 0;
 }
 
-/** ค้างชำระ = ยังไม่ยกเลิก และยังไม่ได้รับเงิน */
-function isOutstanding(d){ return !isVoided(d) && !isPaid(d); }
+/** เก็บได้บางส่วน ยังไม่ครบ */
+function isPartlyPaid(d){
+  return String((d && d.status) || "").indexOf("ชำระบางส่วน") === 0;
+}
+
+/** ยอดที่เก็บได้แล้วของบิลใบนี้ */
+function paidOf(d){
+  if(isVoided(d)) return 0;
+  const amt = parseFloat(d && d.paidAmount);
+  if(!isNaN(amt) && amt > 0) return amt;
+  return isPaid(d) ? (parseFloat(d.total)||0) : 0;   // ข้อมูลเก่าที่ยังไม่มี paidAmount
+}
+
+/** ยอดที่ยังค้างอยู่ของบิลใบนี้ */
+function owedOf(d){
+  if(isVoided(d)) return 0;
+  return Math.max(0, (parseFloat(d.total)||0) - paidOf(d));
+}
+
+/** ค้างชำระ = ยังไม่ยกเลิก และยังเก็บไม่ครบ */
+function isOutstanding(d){ return !isVoided(d) && owedOf(d) > 0.005; }
 
 /** ค้างชำระและเลยวันครบกำหนดมาแล้ว */
 function isOverdue(d){
@@ -3630,13 +3941,13 @@ function renderSummaryPanel(tab, list, shown){
   let cards;
   if(tab === "billing"){
     const billed  = sumDocs(docs);
-    const paid    = sumDocs(docs, isPaid);
-    const owed    = sumDocs(docs, isOutstanding);
+    const paid    = docs.reduce((t,d)=>t+paidOf(d), 0);
+    const owed    = docs.reduce((t,d)=>t+owedOf(d), 0);
     const odCount = live.filter(isOverdue).length;
     cards =
       sumCard("ช่วงเวลา", `<span style="font-size:14px;">${esc(periodLabelOf(st.key, st.mode))}</span>`) +
       sumCard("วางบิลไป", `${fmtMoney(billed)}<span style="font-size:11.5px;font-weight:400;color:var(--ink-muted);"> · ${live.length} ใบ${voidNote}</span>`) +
-      sumCard("เก็บได้แล้ว", `${fmtMoney(paid)}<span style="font-size:11.5px;font-weight:400;color:var(--ink-muted);"> · ${live.filter(isPaid).length} ใบ</span>`, "hi") +
+      sumCard("เก็บได้แล้ว", `${fmtMoney(paid)}<span style="font-size:11.5px;font-weight:400;color:var(--ink-muted);"> · ครบ ${live.filter(isPaid).length} ใบ${live.filter(isPartlyPaid).length?` บางส่วน ${live.filter(isPartlyPaid).length}`:``}</span>`, "hi") +
       sumCard("ค้างชำระ", `${fmtMoney(owed)}<span style="font-size:11.5px;font-weight:400;color:${odCount?"#b3261e":"var(--ink-muted)"};"> · ${live.filter(isOutstanding).length} ใบ${odCount?` เกินกำหนด ${odCount}`:``}</span>`);
   }else{
     cards =
@@ -3653,6 +3964,7 @@ function renderSummaryPanel(tab, list, shown){
       </div>
       <select id="sum-period">${opts}</select>
       <button class="btn ghost sm" onclick="printPeriodSummary('${tab}')">พิมพ์สรุปยอด</button>
+      <button class="btn ghost sm" onclick="exportPeriodCSV('${tab}')">ส่งออก Excel</button>
     </div>
     <div class="sumcards">${cards}</div>
   </div>`;
@@ -3693,7 +4005,7 @@ function printPeriodSummary(tab){
     const cells = isBill
       ? `<td>${esc(d.client||"")}</td>
          <td class="c">${d.dueDate?docDateThai(d.dueDate):"—"}</td>
-         <td class="c">${dead?"ยกเลิก":(isPaid(d)?"ชำระแล้ว":(isOverdue(d)?"เกินกำหนด":"ค้างชำระ"))}</td>`
+         <td class="c">${dead?"ยกเลิก":(isPaid(d)?"ชำระแล้ว":(isPartlyPaid(d)?"ชำระ "+fmtMoney(paidOf(d)):(isOverdue(d)?"เกินกำหนด":"ค้างชำระ")))}</td>`
       : `<td>${esc(d.payer||"")}</td><td class="c">${esc(d.method||"")}</td>`;
     return `<tr${dead?' style="color:#b3261e;"':''}>
       <td class="c">${i+1}</td><td class="c">${esc(d.docNo||"")}</td><td>${docDateThai(d.date)}</td>
@@ -3704,12 +4016,12 @@ function printPeriodSummary(tab){
   const span = isBill ? 6 : 5;
   const foot = isBill
     ? `<tr><td colspan="${span}" style="text-align:right;">รวมวางบิล</td><td class="num">${fmtMoney(sumDocs(sorted))} บาท</td></tr>
-       <tr><td colspan="${span}" style="text-align:right;">เก็บได้แล้ว</td><td class="num">${fmtMoney(sumDocs(sorted, isPaid))} บาท</td></tr>
-       <tr><td colspan="${span}" style="text-align:right;">คงค้างชำระ</td><td class="num">${fmtMoney(sumDocs(sorted, isOutstanding))} บาท</td></tr>`
+       <tr><td colspan="${span}" style="text-align:right;">เก็บได้แล้ว</td><td class="num">${fmtMoney(sorted.reduce((t,d)=>t+paidOf(d),0))} บาท</td></tr>
+       <tr><td colspan="${span}" style="text-align:right;">คงค้างชำระ</td><td class="num">${fmtMoney(sorted.reduce((t,d)=>t+owedOf(d),0))} บาท</td></tr>`
     : `<tr><td colspan="${span}" style="text-align:right;">รวมรับทั้งสิ้น (ไม่นับฉบับที่ยกเลิก)</td>
        <td class="num">${fmtMoney(sumDocs(sorted))} บาท</td></tr>`;
 
-  const bahtLine = isBill ? sumDocs(sorted, isOutstanding) : sumDocs(sorted);
+  const bahtLine = isBill ? sorted.reduce((t,d)=>t+owedOf(d),0) : sumDocs(sorted);
   const bahtNote = isBill ? "ยอดคงค้าง" : "รวมรับ";
 
   const body = `
@@ -3736,23 +4048,122 @@ function printPeriodSummary(tab){
   openDocPrintWindow((isBill?"สรุปยอดวางบิล ":"สรุปยอดรับเงิน ") + periodTxt, body);
 }
 
-/** รับชำระ / ยกเลิกการรับชำระ ใบวางบิล */
+/** หนังสือทวงถามให้ชำระหนี้ ออกจากใบวางบิลที่เลยกำหนดแล้ว */
+function printDemandLetter(idx){
+  const d = HIST_CFG_.billing.cache()[idx];
+  if(!d) return;
+  const owed = owedOf(d);
+  if(owed <= 0){ toast("ใบวางบิลนี้ไม่มียอดค้าง"); return; }
+
+  const lateDays = d.dueDate ? Math.max(0, Math.round((new Date(todayISO()) - new Date(d.dueDate)) / 86400000)) : 0;
+  const deadline = (()=>{ const x=new Date(); x.setDate(x.getDate()+7);
+    return toISO(x.getFullYear(), x.getMonth(), x.getDate()); })();
+
+  const body = `
+    <div class="head">
+      <img src="${document.querySelector('header.top .logo').src}">
+      <div class="office">สำนักกฎหมาย วีอาร์ลอว์<small>๕/๒๓ หมู่ที่ ๑๑ ตำบลบางน้ำผึ้ง อำเภอพระประแดง จังหวัดสมุทรปราการ · โทร ๐๘๐๒๗๖๗๕๕๕</small></div>
+    </div>
+    <div class="doctitle">หนังสือทวงถามให้ชำระหนี้</div>
+    <div class="meta">
+      <div><b>เรียน</b> ${esc(d.client||"")}${d.address?"<br>"+esc(d.address).replace(/\n/g,"<br>"):""}</div>
+      <div style="text-align:right;">วันที่ ${docDateThai(todayISO())}</div>
+    </div>
+    <div class="terms" style="white-space:normal;line-height:2;">
+      <b>เรื่อง</b> ขอให้ชำระค่าบริการทางกฎหมายตามใบวางบิลเลขที่ ${esc(d.docNo||"")}<br><br>
+      ตามที่สำนักกฎหมาย วีอาร์ลอว์ ได้ออกใบวางบิลเลขที่ ${esc(d.docNo||"")}
+      ลงวันที่ ${docDateThai(d.date)} จำนวนเงิน ${fmtMoney(d.total)} บาท
+      ${d.caseNo ? `อันเกี่ยวเนื่องกับคดีหมายเลข ${esc(d.caseNo)}${d.court?" "+esc(d.court):""} ` : ""}
+      โดยกำหนดชำระภายในวันที่ ${docDateThai(d.dueDate)} นั้น<br><br>
+      ปรากฏว่าจนถึงวันที่มีหนังสือฉบับนี้ ท่านยังคงค้างชำระเป็นเงิน
+      <b>${fmtMoney(owed)} บาท (${esc(thaiBahtText(owed))})</b>
+      ${paidOf(d) ? `โดยได้รับชำระมาแล้วบางส่วนจำนวน ${fmtMoney(paidOf(d))} บาท ` : ""}
+      ${lateDays ? `ล่วงเลยกำหนดชำระมาแล้ว ${toThaiNum(lateDays)} วัน` : ""}<br><br>
+      จึงเรียนมาเพื่อขอให้ท่านดำเนินการชำระเงินจำนวนดังกล่าวภายในวันที่ ${docDateThai(deadline)}
+      หากพ้นกำหนดนี้แล้วยังมิได้รับชำระ สำนักกฎหมายจำเป็นต้องดำเนินการตามกฎหมายต่อไป
+      ทั้งนี้หากท่านได้ชำระเงินแล้วก่อนได้รับหนังสือฉบับนี้ ขอให้ถือว่าหนังสือฉบับนี้เป็นอันยกเลิก
+      และต้องขออภัยมา ณ ที่นี้<br><br>
+      ${d.payInfo ? `<b>ช่องทางชำระเงิน</b><br>${esc(d.payInfo).replace(/\n/g,"<br>")}` : ""}
+    </div>
+    <div class="signblock">
+      <div class="line"></div>
+      (${esc(d.lawyer||"")})<br>สำนักกฎหมาย วีอาร์ลอว์
+    </div>
+  `;
+  openDocPrintWindow("หนังสือทวงถาม " + (d.docNo||""), body);
+}
+
+/** ส่งออกตารางเป็นไฟล์ CSV เปิดใน Excel ได้ (ใส่ BOM กันภาษาไทยเพี้ยน) */
+function downloadCSV(filename, rows){
+  const esc2 = v => `"${String(v==null?"":v).replace(/"/g,'""')}"`;
+  const csv = rows.map(r=>r.map(esc2).join(",")).join("\r\n");
+  const blob = new Blob(["\uFEFF"+csv], {type:"text/csv;charset=utf-8;"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{ document.body.removeChild(a); URL.revokeObjectURL(url); }, 500);
+}
+
+/** ส่งออกรายการตามช่วงเวลาที่เลือกในกล่องรวมเงิน ให้ผู้ทำบัญชี */
+function exportPeriodCSV(tab){
+  const st = PERIOD_STATE_[tab];
+  const list = (HIST_CFG_[tab].cache() || []).filter(d=>
+    !st.key || periodKeyOf(d.date, st.mode) === st.key);
+  if(!list.length){ toast("ยังไม่มีเอกสารในช่วงเวลานี้"); return; }
+
+  const sorted = list.slice().sort((a,b)=>String(a.date||"").localeCompare(String(b.date||"")));
+  const isBill = (tab === "billing");
+  const rows = [isBill
+    ? ["เลขที่","วันที่วางบิล","ครบกำหนด","ผู้รับวางบิล","เลขคดี","ศาล","สถานะ","ยอดวางบิล","รับชำระแล้ว","คงค้าง","วันที่รับเงิน","อ้างอิงเอกสารต้นทาง"]
+    : ["เลขที่","วันที่","ผู้ชำระเงิน","วิธีชำระ","รายการ","จำนวนเงิน","สถานะ","อ้างอิงเอกสารต้นทาง"]];
+
+  sorted.forEach(d=>{
+    const stat = isVoided(d) ? "ยกเลิก"
+      : (isBill ? (isPaid(d)?"ชำระแล้ว":(isPartlyPaid(d)?"ชำระบางส่วน":(isOverdue(d)?"เกินกำหนด":"ค้างชำระ"))) : "ปกติ");
+    rows.push(isBill
+      ? [d.docNo, d.date, d.dueDate||"", d.client||"", d.caseNo||"", d.court||"", stat,
+         isVoided(d)?0:(parseFloat(d.total)||0), paidOf(d), owedOf(d), d.paidDate||"", d.srcDocNo||""]
+      : [d.docNo, d.date, d.payer||"", d.method||"",
+         (d.items||[]).map(it=>`${it.label} ${it.amount}`).join(" / "),
+         isVoided(d)?0:(parseFloat(d.total)||0), stat, d.srcDocNo||""]);
+  });
+
+  const name = (isBill?"ใบวางบิล_":"ใบเสร็จ_") + (st.key || "ทั้งหมด") + ".csv";
+  downloadCSV(name, rows);
+  toast("ดาวน์โหลด " + name + " แล้ว");
+}
+
+/** รับชำระ / ย้อนสถานะ ใบวางบิล — รองรับชำระบางส่วน */
 async function togglePaid(idx){
   const cfg = HIST_CFG_.billing;
   const d = cfg.cache()[idx];
   if(!d) return;
 
   if(isPaid(d)){
-    if(!confirm(`ย้อนสถานะใบวางบิล ${d.docNo} กลับเป็น "ยังไม่ชำระ" ?`)) return;
+    if(!confirm(`ล้างยอดรับชำระของใบวางบิล ${d.docNo} กลับเป็น "ยังไม่ชำระ" ?`)) return;
     try{ await api("setBillingPaid", {id:d.id, unpay:true}); toast(`ย้อนสถานะ ${d.docNo} แล้ว`); }
     catch(e){ toast("ไม่สำเร็จ: "+e.message); return; }
   }else{
-    const ans = prompt(`รับชำระใบวางบิล ${d.docNo}\nยอด ${fmtMoney(d.total)} บาท\n\nใส่วันที่รับเงิน (ปปปป-ดด-วว)`, todayISO());
-    if(ans === null) return;
-    const paidDate = ans.trim() || todayISO();
+    const owed = owedOf(d);
+    const amtIn = prompt(
+      `รับชำระใบวางบิล ${d.docNo}\nยอดเต็ม ${fmtMoney(d.total)} บาท` +
+      (paidOf(d) ? `\nรับมาแล้ว ${fmtMoney(paidOf(d))} บาท` : "") +
+      `\nคงค้าง ${fmtMoney(owed)} บาท\n\nรับเงินรอบนี้เท่าไหร่ (เว้นว่าง = รับครบยอดค้าง)`, "");
+    if(amtIn === null) return;
+    let amount = amtIn.trim() === "" ? owed : parseFloat(amtIn.replace(/,/g,""));
+    if(isNaN(amount) || amount <= 0){ toast("จำนวนเงินไม่ถูกต้อง"); return; }
+    if(amount > owed + 0.005){ toast(`รับเกินยอดค้าง (${fmtMoney(owed)} บาท)`); return; }
+
+    const dateIn = prompt(`วันที่รับเงิน (ปปปป-ดด-วว)`, todayISO());
+    if(dateIn === null) return;
+    const paidDate = dateIn.trim() || todayISO();
     if(!/^\d{4}-\d{2}-\d{2}$/.test(paidDate)){ toast("รูปแบบวันที่ไม่ถูกต้อง ต้องเป็น ปปปป-ดด-วว"); return; }
-    try{ await api("setBillingPaid", {id:d.id, paidDate}); toast(`รับชำระ ${d.docNo} แล้ว`); }
-    catch(e){ toast("ไม่สำเร็จ: "+e.message); return; }
+
+    try{
+      const r = await api("setBillingPaid", {id:d.id, paidDate, amount});
+      toast(`รับชำระ ${d.docNo} แล้ว — สะสม ${fmtMoney(r.paidAmount)} จาก ${fmtMoney(r.total)} บาท`);
+    }catch(e){ toast("ไม่สำเร็จ: "+e.message); return; }
   }
   cfg.setCache(null);
   loadDocHistory("billing");
@@ -3782,13 +4193,27 @@ function renderHistList(list, tab){
   }
   box.innerHTML = rows.map(({d,i})=>{
     let badge = "";
-    if(isVoided(d))      badge = ' · <span style="color:#b3261e;">ยกเลิกแล้ว</span>';
-    else if(isPaid(d))   badge = ' · <span style="color:#1a6b5c;">ชำระแล้ว' + (d.paidDate ? " " + docDateThai(d.paidDate) : "") + '</span>';
-    else if(isOverdue(d))badge = ' · <span style="color:#b3261e;">เกินกำหนด</span>';
+    if(isVoided(d))          badge = ' · <span style="color:#b3261e;">ยกเลิกแล้ว</span>';
+    else if(tab === "billing" && isPaid(d))
+      badge = ' · <span style="color:#1a6b5c;">ชำระแล้ว' + (d.paidDate ? " " + docDateThai(d.paidDate) : "") + '</span>';
+    else if(tab === "billing" && isPartlyPaid(d))
+      badge = ` · <span style="color:#b07d1a;">ชำระแล้ว ${fmtMoney(paidOf(d))} · ค้าง ${fmtMoney(owedOf(d))}</span>`;
+    else if(tab === "billing" && isOverdue(d))
+      badge = ' · <span style="color:#b3261e;">เกินกำหนด</span>';
+    if(d.srcDocNo) badge += ` · <span style="color:var(--ink-faint);">จาก ${esc(d.srcDocNo)}</span>`;
 
-    const payBtn = (tab === "billing" && !isVoided(d))
-      ? `<button class="btn ghost sm" onclick="togglePaid(${i})">${isPaid(d)?"ย้อนสถานะ":"รับชำระ"}</button>`
-      : "";
+    let chain = "";
+    if(tab === "billing" && !isVoided(d)){
+      chain += `<button class="btn ghost sm" onclick="togglePaid(${i})">${isPaid(d)?"ย้อนสถานะ":"รับชำระ"}</button>`;
+      if(owedOf(d) > 0.005){
+        chain += `<button class="btn ghost sm" onclick="receiptFromBilling(${i})">ออกใบเสร็จ</button>`;
+        if(isOverdue(d)) chain += `<button class="btn ghost sm" onclick="printDemandLetter(${i})">หนังสือทวงถาม</button>`;
+      }
+    }
+    if(tab === "quote" && !isVoided(d)){
+      chain += `<button class="btn ghost sm" onclick="billFromQuote(${i})">ออกใบวางบิล</button>`;
+    }
+    const payBtn = chain;
 
     return `<div class="hist-row"${isVoided(d)?' style="opacity:.55;"':''}>
       <div class="hi-main">
@@ -3852,11 +4277,23 @@ function reprintDoc(tab, idx){
 }
 
 /** แปลงจำนวนเงินเป็นคำอ่านภาษาไทย เช่น 25000 -> "สองหมื่นห้าพันบาทถ้วน" */
+/**
+ * จำนวนเงินเป็นตัวหนังสือไทย รองรับสตางค์
+ * เช่น 1234567.50 -> "หนึ่งล้านสองแสนสามหมื่นสี่พันห้าร้อยหกสิบเจ็ดบาทห้าสิบสตางค์"
+ * เดิมปัดเป็นจำนวนเต็มแล้วลงท้าย "บาทถ้วน" เสมอ ทำให้เอกสารที่มีเศษสตางค์เขียนผิด
+ */
 function thaiBahtText(num){
-  num = Math.round(Number(num) || 0);
-  if(num === 0) return "ศูนย์บาทถ้วน";
+  let v = Number(num) || 0;
+  const neg = v < 0;
+  v = Math.abs(v);
+
+  let baht = Math.floor(v);
+  let satang = Math.round((v - baht) * 100);
+  if(satang === 100){ baht += 1; satang = 0; }        // เช่น 0.999 -> 1 บาทถ้วน
+
   const digitTh = ['', 'หนึ่ง','สอง','สาม','สี่','ห้า','หก','เจ็ด','แปด','เก้า'];
   const placeTh = ['', 'สิบ','ร้อย','พัน','หมื่น','แสน'];
+
   function readGroup(g){
     let out = '';
     const len = g.length;
@@ -3870,16 +4307,30 @@ function thaiBahtText(num){
     }
     return out;
   }
-  let s = String(num), groups = [];
-  while(s.length > 0){ groups.unshift(s.slice(-6)); s = s.slice(0,-6); }
-  let result = '';
-  groups.forEach((g,gi)=>{
-    const isLast = gi === groups.length-1;
-    const part = readGroup(g);
-    if(part) result += part + (isLast ? '' : 'ล้าน');
-  });
-  return result + 'บาทถ้วน';
+
+  /** อ่านจำนวนเต็มเป็นคำ (ยังไม่มีหน่วยบาท/สตางค์) */
+  function readNumber(n){
+    if(n === 0) return 'ศูนย์';
+    let s = String(n), groups = [];
+    while(s.length > 0){ groups.unshift(s.slice(-6)); s = s.slice(0,-6); }
+    let result = '';
+    groups.forEach((g,gi)=>{
+      const isLast = gi === groups.length-1;
+      const part = readGroup(g);
+      if(part) result += part + (isLast ? '' : 'ล้าน');
+    });
+    return result;
+  }
+
+  let text;
+  if(baht === 0 && satang === 0) text = 'ศูนย์บาทถ้วน';
+  else if(satang === 0)          text = readNumber(baht) + 'บาทถ้วน';
+  else if(baht === 0)            text = readNumber(satang) + 'สตางค์';
+  else                           text = readNumber(baht) + 'บาท' + readNumber(satang) + 'สตางค์';
+
+  return (neg ? 'ลบ' : '') + text;
 }
+
 
 /** เลือกชั้นศาลด้วยการทำตัวหนา+ขีดเส้นใต้ตัวที่เลือก ตัวอื่นปล่อยเป็นตัวธรรมดา ตรงตามแบบสัญญาต้นฉบับ */
 /** สร้าง HTML รายการชั้นที่ติ๊กไว้ ทุกชั้นที่ติ๊กจะโชว์แบบตัวหนาขีดเส้นใต้ ชั้นที่ไม่ติ๊กจะไม่ถูกใส่เลย */
@@ -3895,16 +4346,16 @@ function buildContractBody(data){
   const monthTH = TH_MONTHS[dt.getMonth()];
   const yearTH = toThaiNum(dt.getFullYear()+543);
 
-  const thaiDigitsList = ['๑','๒','๓','๔','๕','๖','๗','๘','๙'];
+  const thaiDigitsList = ['1','2','3','4','5','6','7','8','9'];
   let subNo = 0;
   const installmentLines = data.installments.map((it,i)=>{
     subNo++;
-    return `&emsp;๒.${thaiDigitsList[subNo-1]} งวดที่ ${thaiDigitsList[i]} ชำระภายในวันที่ ${esc(it.d)} เป็นจำนวนเงิน ${toThaiNum(fmtMoney(it.a))} บาท`;
+    return `&emsp;2.${thaiDigitsList[subNo-1]} งวดที่ ${thaiDigitsList[i]} ชำระภายในวันที่ ${esc(it.d)} เป็นจำนวนเงิน ${toThaiNum(fmtMoney(it.a))} บาท`;
   }).join('<br>\n');
   let noteLine = '';
   if(data.note){
     subNo++;
-    noteLine = `<br>\n&emsp;๒.${thaiDigitsList[subNo-1]} หมายเหตุ ${esc(data.note)}`;
+    noteLine = `<br>\n&emsp;2.${thaiDigitsList[subNo-1]} หมายเหตุ ${esc(data.note)}`;
   }
 
   const body = `
@@ -3928,32 +4379,32 @@ function buildContractBody(data){
     <p style="text-indent:2em;">คู่สัญญาทั้งสองฝ่ายตกลงกันมีข้อความดังต่อไปนี้</p>
 
     <p style="text-indent:2em;">
-      ข้อ ๑. <b>ผู้ว่าจ้าง</b>ตกลงจ้าง<b>ผู้รับจ้าง</b>เป็นที่ปรึกษากฎหมาย ในการต่อสู้คดี${data.caseNo ? "หมายเลข "+esc(data.caseNo)+" " : ""}
+      ข้อ 1. <b>ผู้ว่าจ้าง</b>ตกลงจ้าง<b>ผู้รับจ้าง</b>เป็นที่ปรึกษากฎหมาย ในการต่อสู้คดี${data.caseNo ? "หมายเลข "+esc(data.caseNo)+" " : ""}
       ของ${esc(data.court)} โดยมี ${esc(data.plaintiff)} โจทก์ ${esc(data.defendant)} จำเลย โดย <b>ผู้ว่าจ้าง</b> เป็น${esc(data.side)}
       ในคดีทั้งนี้ ใน${stageHtml}
     </p>
 
     <p style="text-indent:2em;">
-      ข้อ ๒. <b>ผู้ว่าจ้าง</b>ตกลงชำระค่าปรึกษากฎหมายให้แก่<b>ผู้รับจ้าง</b>เป็นจำนวนเงิน ${toThaiNum(fmtMoney(data.total))} บาท
+      ข้อ 2. <b>ผู้ว่าจ้าง</b>ตกลงชำระค่าปรึกษากฎหมายให้แก่<b>ผู้รับจ้าง</b>เป็นจำนวนเงิน ${toThaiNum(fmtMoney(data.total))} บาท
       (${thaiBahtText(data.total)}) โดยชำระดังนี้<br>
       ${installmentLines}${noteLine}
     </p>
 
     <p style="text-indent:2em;">
-      ข้อ ๓. <b>ผู้รับจ้าง</b>มีหน้าที่จัดหาทนายความเข้าว่าความหรือแก้ต่างในคดีดังกล่าวให้แก่<b>ผู้ว่าจ้าง</b>ใน${stageHtml}
+      ข้อ 3. <b>ผู้รับจ้าง</b>มีหน้าที่จัดหาทนายความเข้าว่าความหรือแก้ต่างในคดีดังกล่าวให้แก่<b>ผู้ว่าจ้าง</b>ใน${stageHtml}
       <b>ผู้ว่าจ้าง</b>จะไม่ถอนทนายความที่<b>ผู้รับจ้าง</b>จัดหาไว้ เว้นแต่จะได้รับความยินยอมจาก<b>ผู้รับจ้าง</b>
       มิฉะนั้น <b>ผู้ว่าจ้าง</b>จะต้องชำระค่าปรึกษากฎหมายแก่<b>ผู้รับจ้าง</b>เต็มตามจำนวนที่ได้ตกลงกันไว้
     </p>
 
     <p style="text-indent:2em;">
-      ข้อ ๔. หาก<b>ผู้ว่าจ้าง</b>ผิดสัญญาข้อใดข้อหนึ่งดังได้กล่าวมาข้างต้น <b>ผู้ว่าจ้าง</b>ยินยอมให้<b>ผู้รับจ้าง</b>บอกเลิกสัญญา
+      ข้อ 4. หาก<b>ผู้ว่าจ้าง</b>ผิดสัญญาข้อใดข้อหนึ่งดังได้กล่าวมาข้างต้น <b>ผู้ว่าจ้าง</b>ยินยอมให้<b>ผู้รับจ้าง</b>บอกเลิกสัญญา
       และถอนตัวหรือแจ้งทนายความถอนตัวออกจากการเป็นทนายความของ<b>ผู้ว่าจ้าง</b>ได้ทันที
     </p>
 
     <p style="text-indent:2em;">
-      ข้อ ๕. หากคดีมีการอุทธรณ์หรือฎีกาคำพิพากษาศาลล่าง <b>ผู้ว่าจ้าง</b>ตกลงชำระค่าปรึกษากฎหมายแก่<b>ผู้รับจ้าง</b>ดังนี้<br>
-      &emsp;๕.๑ ชั้นอุทธรณ์จำนวน ${toThaiNum(fmtMoney(data.appealFee))} บาท (${data.appealFee?thaiBahtText(data.appealFee):"-"})<br>
-      &emsp;๕.๒ ชั้นฎีกา จำนวน ${toThaiNum(fmtMoney(data.dikaFee))} บาท (${data.dikaFee?thaiBahtText(data.dikaFee):"-"})<br>
+      ข้อ 5. หากคดีมีการอุทธรณ์หรือฎีกาคำพิพากษาศาลล่าง <b>ผู้ว่าจ้าง</b>ตกลงชำระค่าปรึกษากฎหมายแก่<b>ผู้รับจ้าง</b>ดังนี้<br>
+      &emsp;5.1 ชั้นอุทธรณ์จำนวน ${toThaiNum(fmtMoney(data.appealFee))} บาท (${data.appealFee?thaiBahtText(data.appealFee):"-"})<br>
+      &emsp;5.2 ชั้นฎีกา จำนวน ${toThaiNum(fmtMoney(data.dikaFee))} บาท (${data.dikaFee?thaiBahtText(data.dikaFee):"-"})<br>
       ทั้งนี้เมื่อ<b>ผู้รับจ้าง</b>จัดทำอุทธรณ์หรือฎีกาแล้วเสร็จและ<b>ผู้ว่าจ้าง</b>ได้ตรวจดูจนเป็นที่พอใจแล้ว
     </p>
 
@@ -4008,6 +4459,7 @@ async function confirmContract(){
 
   const record = { date:dateISO, client, address:addr, caseNo, court, plaintiff, defendant,
                     side, stages, total, installments, note, appealFee, dikaFee, lawyer };
+  record.caseId = docCaseFields("k").caseId;
 
   let result;
   try{ result = await api("saveContract", {record}); }
@@ -4105,6 +4557,24 @@ const EV_DONE = ["เสร็จสิ้น","ยกเลิก"];
 
 let events = [];
 let editingEventId = null;
+
+/** โหลดใบวางบิลไว้ล่วงหน้า เพื่อเตือนบิลค้าง/เกินกำหนดบนหน้าแรก (เฉพาะ admin) */
+async function fetchBillings(){
+  if(TEAM_MODE && session.role !== "admin") return;
+  const r = await api("listBillings");
+  histBillingsCache = r.billings || [];
+}
+
+/** โหลดใบวางบิลเบื้องหลัง ไม่บล็อกการเปิดแอป พอได้ข้อมูลแล้วค่อยวาดหน้าแรกใหม่ */
+function fetchBillingsBg(){
+  fetchBillings()
+    .then(()=>{
+      // วาดใหม่เฉพาะตอนที่ผู้ใช้ยังอยู่หน้าแรก จะได้ไม่ไปรบกวนหน้าอื่น
+      const home = document.getElementById("view-home");
+      if(home && home.classList.contains("active")) renderHome();
+    })
+    .catch(()=>{ /* ไม่มีสิทธิ์ หรือยังไม่ได้สร้างชีตใบวางบิล — ข้ามไปเงียบ ๆ */ });
+}
 
 async function fetchEvents(){
   const r = await api("eventList");
@@ -4307,6 +4777,50 @@ document.getElementById("eventsContainer").addEventListener("click", e=>{
   if(card) openEventForm(card.dataset.eventId);
 });
 
+/** ช่องสถิติ "บิลเกินกำหนด" บนหน้าแรก — โผล่เฉพาะเมื่อโหลดใบวางบิลมาแล้ว */
+function billStat(){
+  const list = histBillingsCache;
+  if(!list) return "";
+  const od = list.filter(isOverdue);
+  const owed = od.reduce((t,d)=>t+owedOf(d), 0);
+  return `<div class="stat ${od.length?"s-bad":""}" onclick="openBillingHistory()" style="cursor:pointer;">
+    <b>${od.length}</b><span>บิลเกินกำหนด${od.length?` · ${fmtMoney(owed)} บาท`:""}</span></div>`;
+}
+
+/** รายการบิลเกินกำหนดบนหน้าแรก */
+function overdueBillsHTML(){
+  const list = histBillingsCache;
+  if(!list) return "";
+  const od = list.filter(isOverdue)
+    .sort((a,b)=>String(a.dueDate||"").localeCompare(String(b.dueDate||"")));
+  if(!od.length) return "";
+
+  const rows = od.slice(0,8).map(d=>{
+    const late = Math.max(0, Math.round((new Date(todayISO()) - new Date(d.dueDate)) / 86400000));
+    return `<div class="case-card">
+      <span class="status-dot dot-upcoming"></span>
+      <div class="case-main">
+        <div class="case-id">${esc(d.docNo)} · ครบกำหนด ${docDateThai(d.dueDate)}</div>
+        <div class="case-parties">${esc(d.client||"")}</div>
+        <div class="case-sub">${d.caseNo?esc(d.caseNo)+" · ":""}เกินมาแล้ว ${toThaiNum(late)} วัน</div>
+      </div>
+      <div class="case-appt"><b>ค้าง ${fmtMoney(owedOf(d))}</b><small>บาท</small></div>
+    </div>`;
+  }).join("");
+
+  return `<div class="section-label">บิลเกินกำหนดชำระ${od.length>8?` (แสดง 8 จาก ${toThaiNum(od.length)})`:""}</div>` + rows;
+}
+
+/** เปิดประวัติเอกสารที่แท็บใบวางบิลโดยตรง */
+function openBillingHistory(){
+  currentHistTab = "billing";
+  document.querySelectorAll("#hist-tab-seg button").forEach(b=>
+    b.classList.toggle("on", b.dataset.v === "billing"));
+  const s2 = document.getElementById("search-hist");
+  if(s2) s2.value = "";
+  openDocModal("history");
+}
+
 function renderHome(){
   const el = document.getElementById("homeContainer");
   const today = todayISO();
@@ -4338,9 +4852,10 @@ function renderHome(){
   const stat = (n,label,cls)=>`<div class="stat ${cls||""}"><b>${n}</b><span>${label}</span></div>`;
   let html = `<div class="stats">
     ${stat(todayList.length + evToday.length,"นัดวันนี้", (todayList.length+evToday.length)?"s-hot":"")}
-    ${stat(weekList.length + evWeek.length,"นัดใน ๗ วัน", (weekList.length+evWeek.length)?"s-warn":"")}
-    ${stat(urgent.length,"ครบกำหนดใน ๗ วัน", urgent.length?"s-warn":"")}
+    ${stat(weekList.length + evWeek.length,"นัดใน 7 วัน", (weekList.length+evWeek.length)?"s-warn":"")}
+    ${stat(urgent.length,"ครบกำหนดใน 7 วัน", urgent.length?"s-warn":"")}
     ${stat(overdue.length,"เลยกำหนดแล้ว", overdue.length?"s-bad":"")}
+    ${billStat()}
   </div>`;
 
   const row = (c,right,note)=>{
@@ -4385,11 +4900,13 @@ function renderHome(){
       + evToday.map(e=> evRow(e, `<b>${esc(e.time||"ทั้งวัน")}</b>`)).join("")
     : `<div class="empty"><b>วันนี้ไม่มีนัด</b>ตรวจนัดในสัปดาห์นี้ด้านล่างได้</div>`;
 
-  html += `<div class="section-label">นัดใน ๗ วันข้างหน้า</div>`;
+  html += `<div class="section-label">นัดใน 7 วันข้างหน้า</div>`;
   html += (weekList.length || evWeek.length)
     ? weekList.map(({c,a})=> row(c, `<b>${esc(apptLabel(a))}</b><small>${daysAway(a.date)}</small>`, a.note)).join("")
       + evWeek.map(e=> evRow(e, `<b>${esc(evLabel(e))}</b><small>${daysAway(e.date)}</small>`)).join("")
-    : `<div class="empty"><b>ไม่มีนัดใน ๗ วันข้างหน้า</b>ดูทั้งเดือนได้ที่แท็บตารางนัดรายเดือน</div>`;
+    : `<div class="empty"><b>ไม่มีนัดใน 7 วันข้างหน้า</b>ดูทั้งเดือนได้ที่แท็บตารางนัดรายเดือน</div>`;
+
+  html += overdueBillsHTML();
 
   el.innerHTML = html;
 }
@@ -4689,16 +5206,16 @@ async function enterApp(){
   refreshIdHint();
   setSyncState("busy");
   try{
-    const who = await api("ping");          // ยืนยันตัวตนใหม่ทุกครั้งที่เปิดแอป
-    session.user = who.user || session.user;
-    session.role = who.role || "user";
-    applyRolePermissions();
-    saveSession();
-    await fetchAll();
-    try{ await fetchEvents(); }catch(e){ /* ยังไม่ได้สร้างชีตนัดอื่น */ }
+    await bootLoad();           // ยืนยันตัวตน + สำนวน + นัดอื่น + ใบวางบิล ในรอบเดียว
     refreshIdHint();
     openRequestedCase();
   }catch(err){
+    // รหัสผ่านไม่ถูกต้อง — ต้องเด้งกลับหน้าใส่รหัส ไม่ใช่เข้าแอปแบบอ่านอย่างเดียว
+    if(err.code === "AUTH"){
+      document.getElementById("app").style.display = "none";
+      document.getElementById("gate").style.display = "";
+      throw err;
+    }
     // ดึงข้อมูลใหม่ไม่ได้ — ใช้สำเนาในเครื่องแบบอ่านอย่างเดียว (รวมนัดอื่นด้วย)
     readOnly = true;
     const had = load();
@@ -4716,14 +5233,10 @@ async function attemptLogin(){
   if(!pass){ showGate("กรุณาใส่รหัสผ่าน"); return; }
 
   btn.disabled = true; btn.textContent = "กำลังตรวจสอบ…";
-  session = { passcode: pass, user: "" };
+  session = { passcode: pass, user: "", role: "user" };
   try{
+    // ตรวจรหัสผ่านไปพร้อมกับโหลดข้อมูลในรอบเดียว — รหัสผิดจะได้ error AUTH กลับมาเอง
     // ชื่อผู้ใช้มาจากเซิร์ฟเวอร์ตามรหัสที่ใช้เข้า ไม่ได้ให้ผู้ใช้พิมพ์เอง
-    const r = await api("ping");
-    session.user = r.user || "ไม่ระบุชื่อ";
-    session.role = r.role || "user";
-    applyRolePermissions();
-    saveSession();
     await enterApp();
   }catch(err){
     session.passcode = "";
@@ -4746,13 +5259,8 @@ document.getElementById("logoutBtn").addEventListener("click", ()=>{
 document.getElementById("refreshBtn").addEventListener("click", async ()=>{
   setSyncState("busy");
   try{
-    const who = await api("ping");          // ยืนยันตัวตนใหม่ทุกครั้งที่เปิดแอป
-    session.user = who.user || session.user;
-    session.role = who.role || "user";
-    applyRolePermissions();
-    saveSession();
-    await fetchAll();
-    try{ await fetchEvents(); }catch(e){ /* ยังไม่ได้สร้างชีตนัดอื่น */ }
+    histBillingsCache = null;
+    await bootLoad();           // โหลดใหม่ทั้งหมดในรอบเดียวเช่นกัน
     refreshCurrentView();
     toast("โหลดข้อมูลใหม่แล้ว ("+cases.length+" สำนวน)");
   }catch(err){
