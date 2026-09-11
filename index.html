@@ -1142,7 +1142,8 @@ const FIELD_LABELS = {
   lawyerPhone:"เบอร์ทนาย", verdict1:"คำพิพากษาศาลชั้นต้น", verdict2:"คำพิพากษาศาลอุทธรณ์",
   verdict3:"คำพิพากษาศาลฎีกา",
   verdictDate1:"วันอ่านคำพิพากษาชั้นต้น", appealExtend:"ขยายอุทธรณ์ถึง",
-  verdictDate2:"วันอ่านคำพิพากษาอุทธรณ์", supremeExtend:"ขยายฎีกาถึง"
+  verdictDate2:"วันอ่านคำพิพากษาอุทธรณ์", supremeExtend:"ขยายฎีกาถึง",
+  appealFiled:"วันที่ยื่นอุทธรณ์", supremeFiled:"วันที่ยื่นฎีกา"
 };
 const STORE_KEY = "vrlaw_cases_v1";
 
@@ -1377,6 +1378,7 @@ async function persistCase(record, changes, previousId, isNew){
     verdict1:record.verdict1||"", verdict2:record.verdict2||"", verdict3:record.verdict3||"",
     verdictDate1:record.verdictDate1||"", appealExtend:record.appealExtend||"",
     verdictDate2:record.verdictDate2||"", supremeExtend:record.supremeExtend||"",
+    appealFiled:record.appealFiled||"", supremeFiled:record.supremeFiled||"",
     nextAppointment: nextApptDate(record), appointmentTime: nextApptTime(record),
     notes: record.notes,
     previousId: previousId || null,
@@ -2046,7 +2048,9 @@ function openCase(id){
               <input type="hidden" class="tdp-value" id="f-verdictDate1" value="${esc(c.verdictDate1)}">
               <div class="tdp-pop"></div>
             </div>
-            <span style="font-size:12px;color:var(--ink-faint);margin-top:4px;">ครบอุทธรณ์: <b>${c.verdictDate1?esc(fmtDate(c.appealExtend||addOneMonth(c.verdictDate1))):"—"}</b></span>
+            <span style="font-size:12px;color:var(--ink-faint);margin-top:4px;">${c.appealFiled
+  ? `<b style="color:var(--jade-deep);">ยื่นอุทธรณ์แล้ว ${esc(fmtDate(c.appealFiled))}</b>`
+  : `ครบอุทธรณ์: <b>${c.verdictDate1?esc(fmtDate(c.appealExtend||addOneMonth(c.verdictDate1))):"—"}</b>`}</span>
           </div>
           <div class="field"><label>ขยายอุทธรณ์ถึง (ถ้าศาลอนุญาต)</label>
             <div class="tdp" data-tdp>
@@ -2054,6 +2058,14 @@ function openCase(id){
               <input type="hidden" class="tdp-value" id="f-appealExtend" value="${esc(c.appealExtend)}">
               <div class="tdp-pop"></div>
             </div>
+          </div>
+          <div class="field"><label>วันที่ยื่นอุทธรณ์แล้ว</label>
+            <div class="tdp" data-tdp>
+              <input type="text" class="tdp-display" readonly placeholder="ยังไม่ได้ยื่น">
+              <input type="hidden" class="tdp-value" id="f-appealFiled" value="${esc(c.appealFiled)}">
+              <div class="tdp-pop"></div>
+            </div>
+            <span style="font-size:12px;color:var(--ink-faint);margin-top:4px;">ใส่วันที่แล้วตัวนับถอยหลังครบอุทธรณ์จะหายไป</span>
           </div>
         </div>
         <div class="field"><label>ศาลอุทธรณ์</label><input id="f-verdict2" value="${esc(c.verdict2)}"></div>
@@ -2064,7 +2076,9 @@ function openCase(id){
               <input type="hidden" class="tdp-value" id="f-verdictDate2" value="${esc(c.verdictDate2)}">
               <div class="tdp-pop"></div>
             </div>
-            <span style="font-size:12px;color:var(--ink-faint);margin-top:4px;">ครบฎีกา: <b>${c.verdictDate2?esc(fmtDate(c.supremeExtend||addOneMonth(c.verdictDate2))):"—"}</b></span>
+            <span style="font-size:12px;color:var(--ink-faint);margin-top:4px;">${c.supremeFiled
+  ? `<b style="color:var(--jade-deep);">ยื่นฎีกาแล้ว ${esc(fmtDate(c.supremeFiled))}</b>`
+  : `ครบฎีกา: <b>${c.verdictDate2?esc(fmtDate(c.supremeExtend||addOneMonth(c.verdictDate2))):"—"}</b>`}</span>
           </div>
           <div class="field"><label>ขยายฎีกาถึง (ถ้าศาลอนุญาต)</label>
             <div class="tdp" data-tdp>
@@ -2072,6 +2086,14 @@ function openCase(id){
               <input type="hidden" class="tdp-value" id="f-supremeExtend" value="${esc(c.supremeExtend)}">
               <div class="tdp-pop"></div>
             </div>
+          </div>
+          <div class="field"><label>วันที่ยื่นฎีกาแล้ว</label>
+            <div class="tdp" data-tdp>
+              <input type="text" class="tdp-display" readonly placeholder="ยังไม่ได้ยื่น">
+              <input type="hidden" class="tdp-value" id="f-supremeFiled" value="${esc(c.supremeFiled)}">
+              <div class="tdp-pop"></div>
+            </div>
+            <span style="font-size:12px;color:var(--ink-faint);margin-top:4px;">ใส่วันที่แล้วตัวนับถอยหลังครบฎีกาจะหายไป</span>
           </div>
         </div>
         <div class="field"><label>ศาลฎีกา</label><input id="f-verdict3" value="${esc(c.verdict3)}"></div>
@@ -4493,17 +4515,20 @@ function daysUntil(iso){
 }
 /** รายการกำหนดที่ยังต้องจับตาของสำนวนหนึ่ง */
 function deadlines(c){
+  // คดีจบแล้ว ไม่ต้องเตือนอะไรอีก
+  if(c.status === DONE_STATUS) return [];
+
   const out = [];
-  const add = (label, base, extend)=>{
+  const add = (label, base, extend, filed, waitStatus)=>{
+    if(filed) return;                       // ยื่นไปแล้ว — ตัวนับถอยหลังหายไป
+    if(c.status === waitStatus) return;     // ตั้งสถานะเป็นรอฟังผลแล้ว ก็ถือว่ายื่นแล้ว
     if(!base && !extend) return;
     const due = extend || addOneMonth(base);
     if(!due) return;
     out.push({label, due, extended: !!extend, days: daysUntil(due)});
   };
-  add("ครบอุทธรณ์", c.verdictDate1, c.appealExtend);
-  add("ครบฎีกา",   c.verdictDate2, c.supremeExtend);
-  // ยื่นไปแล้ว/คดีจบแล้ว ไม่ต้องเตือน
-  if(c.status === DONE_STATUS) return [];
+  add("ครบอุทธรณ์", c.verdictDate1, c.appealExtend, c.appealFiled,  "รอฟังอุทธรณ์");
+  add("ครบฎีกา",   c.verdictDate2, c.supremeExtend, c.supremeFiled, "รอฟังฎีกา");
   return out;
 }
 function deadlineClass(days){
