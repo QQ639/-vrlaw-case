@@ -883,7 +883,7 @@
     </div>
     <div class="row-end">
       <button class="btn ghost sm" onclick="closeDocModal('quote')">ยกเลิก</button>
-      <button class="btn sm" onclick="confirmQuote()">พิมพ์ใบเสนอราคา</button>
+      <button class="btn sm" onclick="confirmQuote(this)">พิมพ์ใบเสนอราคา</button>
     </div>
   </div>
 </div>
@@ -934,7 +934,7 @@
     </div>
     <div class="row-end">
       <button class="btn ghost sm" onclick="closeDocModal('receipt')">ยกเลิก</button>
-      <button class="btn sm" onclick="confirmReceipt()">พิมพ์ใบเสร็จรับเงิน</button>
+      <button class="btn sm" onclick="confirmReceipt(this)">พิมพ์ใบเสร็จรับเงิน</button>
     </div>
   </div>
 </div>
@@ -987,7 +987,7 @@
     </div>
     <div class="row-end">
       <button class="btn ghost sm" onclick="closeDocModal('billing')">ยกเลิก</button>
-      <button class="btn sm" onclick="confirmBilling()">พิมพ์ใบวางบิล</button>
+      <button class="btn sm" onclick="confirmBilling(this)">พิมพ์ใบวางบิล</button>
     </div>
   </div>
 </div>
@@ -1084,7 +1084,7 @@
 
     <div class="row-end">
       <button class="btn ghost sm" onclick="closeDocModal('contract')">ยกเลิก</button>
-      <button class="btn sm" onclick="confirmContract()">พิมพ์สัญญา</button>
+      <button class="btn sm" onclick="confirmContract(this)">พิมพ์สัญญา</button>
     </div>
   </div>
 </div>
@@ -1328,8 +1328,35 @@ function showApiTimings(){
       <tbody>${last}</tbody></table>`);
 }
 
+/**
+ * ล็อกปุ่มระหว่างรอเซิร์ฟเวอร์ กันกดรัวตอนเน็ตช้า
+ * ปิดปุ่มทุกปุ่มในกล่องเดียวกันด้วย จะได้ไม่กดปุ่มอื่นแทรกระหว่างกำลังบันทึก
+ */
+async function withBusy(btn, busyText, job){
+  if(btn && btn.dataset.busy === "1") return;          // กดซ้ำระหว่างกำลังทำงาน ไม่ต้องทำอะไร
+  const box = btn ? btn.closest(".docmodal, .row-end, body") : null;
+  const others = box ? [...box.querySelectorAll("button")] : [];
+  const label = btn ? btn.textContent : "";
+  if(btn){ btn.dataset.busy = "1"; btn.textContent = busyText || "กำลังบันทึก…"; }
+  others.forEach(b=>b.disabled = true);
+  try{
+    return await job();
+  }finally{
+    others.forEach(b=>b.disabled = false);
+    if(btn){ delete btn.dataset.busy; btn.textContent = label; }
+  }
+}
+
+/** รหัสประจำคำขอ ใช้กันเซิร์ฟเวอร์ทำงานซ้ำเวลาต้องยิงใหม่ */
+function newReqId(){
+  return Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10);
+}
+
 async function api(action, payload){
   const body = Object.assign({ action, passcode: session.passcode, user: session.user }, payload||{});
+  // สร้างครั้งเดียวนอกวงลองใหม่ ทุกครั้งที่ยิงซ้ำจะใช้รหัสเดิม
+  // เซิร์ฟเวอร์เห็นรหัสซ้ำแล้วจะคืนผลเดิม ไม่ออกเลขเอกสารใหม่
+  body.reqId = newReqId();
   const MAX_TRY = 3;
   let lastErr = null;
   const t0 = performance.now();
@@ -3949,7 +3976,7 @@ function buildQuoteBody(data){
   `;
 }
 
-async function confirmQuote(){
+async function confirmQuote(btn){
   const client = document.getElementById("q-client").value.trim();
   const dateISO = document.getElementById("q-date").value || todayISO();
   const addr = document.getElementById("q-addr").value.trim();
@@ -3973,7 +4000,12 @@ async function confirmQuote(){
   Object.assign(record, docCaseFields("q"));
 
   let result;
-  try{ result = await api("saveQuote", {record}); }
+  try{
+    // ล็อกปุ่มระหว่างรอ กันกดซ้ำจนได้เลขที่เอกสารหลายใบ
+    result = await withBusy(btn, "กำลังบันทึก…", ()=>api("saveQuote", {record}));
+    if(!result) return;                       // กดซ้ำระหว่างกำลังบันทึก
+    if(result.duplicate) toast("บันทึกไปแล้ว — ใช้เลขที่เดิม " + result.docNo);
+  }
   catch(e){ toast("บันทึกไม่สำเร็จ: "+e.message); return; }
   histQuotesCache = null;
 
@@ -4013,7 +4045,7 @@ function buildReceiptBody(data){
   `;
 }
 
-async function confirmReceipt(){
+async function confirmReceipt(btn){
   const payer = document.getElementById("r-payer").value.trim();
   const dateISO = document.getElementById("r-date").value || todayISO();
   const method = document.getElementById("r-method").value;
@@ -4039,7 +4071,12 @@ async function confirmReceipt(){
   if(docSource.receipt) Object.assign(record, docSource.receipt);
 
   let result;
-  try{ result = await api("saveReceipt", {record}); }
+  try{
+    // ล็อกปุ่มระหว่างรอ กันกดซ้ำจนได้เลขที่เอกสารหลายใบ
+    result = await withBusy(btn, "กำลังบันทึก…", ()=>api("saveReceipt", {record}));
+    if(!result) return;                       // กดซ้ำระหว่างกำลังบันทึก
+    if(result.duplicate) toast("บันทึกไปแล้ว — ใช้เลขที่เดิม " + result.docNo);
+  }
   catch(e){ toast("บันทึกไม่สำเร็จ: "+e.message); return; }
   histReceiptsCache = null;
   if(result.applied && result.applied.ok){
@@ -4111,7 +4148,7 @@ function buildBillingBody(data){
   `;
 }
 
-async function confirmBilling(){
+async function confirmBilling(btn){
   const client   = document.getElementById("b-client").value.trim();
   const dateISO  = document.getElementById("b-date").value || todayISO();
   const addr     = document.getElementById("b-addr").value.trim();
@@ -4144,7 +4181,12 @@ async function confirmBilling(){
   if(docSource.billing) Object.assign(record, docSource.billing);
 
   let result;
-  try{ result = await api("saveBilling", {record}); }
+  try{
+    // ล็อกปุ่มระหว่างรอ กันกดซ้ำจนได้เลขที่เอกสารหลายใบ
+    result = await withBusy(btn, "กำลังบันทึก…", ()=>api("saveBilling", {record}));
+    if(!result) return;                       // กดซ้ำระหว่างกำลังบันทึก
+    if(result.duplicate) toast("บันทึกไปแล้ว — ใช้เลขที่เดิม " + result.docNo);
+  }
   catch(e){ toast("บันทึกไม่สำเร็จ: "+e.message); return; }
   histBillingsCache = null;
   docSource.billing = null;
@@ -4788,7 +4830,7 @@ function buildContractBody(data){
     font-size:16pt;color:#000;line-height:1.7;">${body}</div>`;
 }
 
-async function confirmContract(){
+async function confirmContract(btn){
   const dateISO   = document.getElementById("k-date").value || todayISO();
   const client    = document.getElementById("k-client").value.trim();
   const addr      = document.getElementById("k-addr").value.trim();
@@ -4825,7 +4867,12 @@ async function confirmContract(){
   record.caseId = docCaseFields("k").caseId;
 
   let result;
-  try{ result = await api("saveContract", {record}); }
+  try{
+    // ล็อกปุ่มระหว่างรอ กันกดซ้ำจนได้เลขที่เอกสารหลายใบ
+    result = await withBusy(btn, "กำลังบันทึก…", ()=>api("saveContract", {record}));
+    if(!result) return;                       // กดซ้ำระหว่างกำลังบันทึก
+    if(result.duplicate) toast("บันทึกไปแล้ว — ใช้เลขที่เดิม " + result.docNo);
+  }
   catch(e){ toast("บันทึกไม่สำเร็จ: "+e.message); return; }
   histContractsCache = null;
 
