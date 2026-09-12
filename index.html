@@ -586,6 +586,18 @@
   .docmodal fieldset legend{padding:0 6px;font-size:13px;font-weight:700;color:var(--jade-deep);}
   .hist-row{display:flex;align-items:center;gap:12px;padding:12px 4px;border-bottom:1px solid var(--line-soft);}
   .hist-row:last-child{border-bottom:0;}
+  .motion-row{border:1px solid var(--line-soft);border-radius:10px;padding:10px 12px;margin-bottom:10px;
+              background:rgba(0,0,0,.015);}
+  .motion-row.past{opacity:.6;}
+  .motion-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:10px;}
+  .motion-grid .mfield{display:flex;flex-direction:column;min-width:0;}
+  .motion-grid .mfield label{font-size:11.5px;color:var(--ink-muted);margin-bottom:4px;}
+  .motion-grid .mfield select,
+  .motion-grid .mfield input[type=number],
+  .motion-grid .mfield input[type=text]{width:100%;}
+  .motion-foot{display:flex;align-items:center;gap:8px;margin-top:10px;}
+  .motion-foot .mo-note{flex:1;min-width:0;}
+  .mo-hint{margin-top:4px;}
   .sumpanel{border:1px solid var(--line-soft);border-radius:10px;padding:10px 12px;margin-bottom:12px;
             background:rgba(0,0,0,.02);}
   .sumpanel .sumtop{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:8px;}
@@ -644,6 +656,7 @@
 
   <nav class="tabs">
     <button data-view="home" class="active">หน้าแรก</button>
+    <button data-view="pending">รอฟ้อง<span class="count" id="cnt-pending">0</span></button>
     <button data-view="trial">ศาลชั้นต้น<span class="count" id="cnt-trial">0</span></button>
     <button data-view="appeal">ศาลอุทธรณ์<span class="count" id="cnt-appeal">0</span></button>
     <button data-view="supreme">ศาลฎีกา<span class="count" id="cnt-supreme">0</span></button>
@@ -657,6 +670,12 @@
 
   <section id="view-home" class="view active">
     <div id="homeContainer"></div>
+  </section>
+
+  <section id="view-pending" class="view">
+    <div class="searchbar"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      <input id="search-pending" type="text" placeholder="ค้นหาเลขคดี / ชื่อคดี / คู่ความ / ลูกความ / ทนายความ / หมายเหตุ"></div>
+    <div id="list-pending"></div>
   </section>
 
   <section id="view-trial" class="view">
@@ -1119,12 +1138,59 @@ function isKnownSubject(v){ return !v || APPT_SUBJECTS.includes(v); }
 const APPT_TIME_RANK = {"เช้า":1,"บ่าย":2,"เย็น":3};
 function apptTimeRank(t){ return APPT_TIME_RANK[t] || 4; }   // ไม่ระบุเวลา ให้อยู่ท้ายสุดของวัน
 const DONE_STATUS = "คดีถึงที่สุดแล้ว เสร็จสิ้นสำนวน";
+const PENDING_STATUSES = ["รอฟ้อง"];
+
+/* ---------- คำร้อง และคำสั่งศาล ---------- */
+const MOTION_OPTIONS = [
+  "คำร้องขอเลื่อนคดี",
+  "คำร้องขอขยายระยะเวลายื่นอุทธรณ์",
+  "คำร้องขอขยายระยะเวลายื่นฎีกา",
+  "คำร้องขอขยายระยะเวลายื่นคำให้การ",
+  "คำร้องขอแก้ไขเพิ่มเติมคำฟ้อง",
+  "คำร้องขอแก้ไขเพิ่มเติมคำให้การ",
+  "คำร้องขออนุญาตยื่นคำให้การ",
+  "คำร้องขอยื่นบัญชีระบุพยานเพิ่มเติม",
+  "คำร้องขอหมายเรียกพยานเอกสาร",
+  "คำร้องขอหมายเรียกพยานบุคคล",
+  "คำร้องขอสืบพยานนอกศาล",
+  "คำร้องขอสืบพยานล่วงหน้า",
+  "คำร้องขอปล่อยชั่วคราว",
+  "คำร้องขอถอนฟ้อง",
+  "คำร้องขอถอนคำร้อง",
+  "คำร้องขอคุ้มครองชั่วคราวก่อนพิพากษา",
+  "คำร้องขอทุเลาการบังคับคดี",
+  "คำร้องขอยึด/อายัดทรัพย์",
+  "คำร้องขอตั้งเจ้าพนักงานบังคับคดี",
+  "คำร้องขอรับเงินจากศาล",
+  "คำร้องขอคัดถ่ายเอกสาร",
+  "คำร้องขอออกคำบังคับ",
+  "คำร้องขอพิจารณาคดีใหม่",
+  "คำร้องขอดำเนินคดีอย่างคนอนาถา",
+  "คำร้องขอส่งหมายข้ามเขต",
+  "คำแถลง",
+  "คำคัดค้าน"
+];
+const ORDER_OPTIONS = [
+  "อนุญาต",
+  "อนุญาตบางส่วน",
+  "ไม่อนุญาต",
+  "ยกคำร้อง",
+  "ให้แก้ไขภายในกำหนด",
+  "ให้ส่งสำเนาให้อีกฝ่าย",
+  "ให้นำส่งภายในกำหนด",
+  "ให้วางเงินประกัน",
+  "นัดไต่สวนคำร้อง",
+  "สั่งในรายงานกระบวนพิจารณา",
+  "รอสั่ง / ยังไม่มีคำสั่ง"
+];
+const MOTION_OTHER = "__other__";
 const APPEAL_STATUSES = ["ครบอุทธรณ์","รอฟังอุทธรณ์"];
 const SUPREME_STATUSES = ["ครบฎีกา","รอฟังฎีกา"];
 const ENFORCEMENT_STATUSES = ["บังคับคดี"];
-const STAGES = ["trial","appeal","supreme","enforcement","closed"];
-const STAGE_NAMES = {trial:"ศาลชั้นต้น",appeal:"ศาลอุทธรณ์",supreme:"ศาลฎีกา",enforcement:"บังคับคดี",closed:"คดีที่สิ้นสุดแล้ว"};
+const STAGES = ["pending","trial","appeal","supreme","enforcement","closed"];
+const STAGE_NAMES = {pending:"รอฟ้อง",trial:"ศาลชั้นต้น",appeal:"ศาลอุทธรณ์",supreme:"ศาลฎีกา",enforcement:"บังคับคดี",closed:"คดีที่สิ้นสุดแล้ว"};
 const STAGE_EMPTY_MSG = {
+  pending:"ยังไม่มีสำนวนที่รอฟ้อง",
   trial:"ยังไม่มีสำนวนในชั้นศาลชั้นต้น",
   appeal:"ยังไม่มีสำนวนที่อยู่ในชั้นอุทธรณ์",
   supreme:"ยังไม่มีสำนวนที่อยู่ในชั้นฎีกา",
@@ -1143,7 +1209,8 @@ const FIELD_LABELS = {
   verdict3:"คำพิพากษาศาลฎีกา",
   verdictDate1:"วันอ่านคำพิพากษาชั้นต้น", appealExtend:"ขยายอุทธรณ์ถึง",
   verdictDate2:"วันอ่านคำพิพากษาอุทธรณ์", supremeExtend:"ขยายฎีกาถึง",
-  appealFiled:"วันที่ยื่นอุทธรณ์", supremeFiled:"วันที่ยื่นฎีกา"
+  appealFiled:"วันที่ยื่นอุทธรณ์", supremeFiled:"วันที่ยื่นฎีกา",
+  noticeSent:"วันส่งหนังสือบอกกล่าว", noticeAck:"วันรับเอกสารตอบรับ", motions:"คำร้องและคำสั่งศาล"
 };
 const STORE_KEY = "vrlaw_cases_v1";
 
@@ -1217,6 +1284,7 @@ function applyRolePermissions(){
   if(btn) btn.style.display = isAdmin ? "" : "none";
 }
 let readOnly = false;          // จริงเมื่อดึงข้อมูลจากเซิร์ฟเวอร์ไม่ได้ และใช้สำเนาในเครื่องแทน
+let syncing  = false;          // จริงระหว่างรอข้อมูลรอบแรก ตอนที่กำลังโชว์สำเนาในเครื่องอยู่
 let lastFetchAt = 0;
 
 /* ---- คุยกับเซิร์ฟเวอร์ ----
@@ -1339,7 +1407,7 @@ let storageOK = true;
 function save(){
   if(!storageOK) return;
   try{
-    localStorage.setItem(STORE_KEY, JSON.stringify({cases, events}));
+    localStorage.setItem(STORE_KEY, JSON.stringify({cases, events, billings: histBillingsCache}));
   }catch(e){
     storageOK = false;
     toast("บันทึกลงเครื่องไม่สำเร็จ — ข้อมูลจะหายเมื่อปิดหน้า");
@@ -1354,6 +1422,7 @@ function load(){
     cases = data.cases;
     cases.forEach(normalizeCase);
     if(Array.isArray(data.events)) events = data.events;   // เผื่อแคชเก่าที่ยังไม่มี events ไม่ให้พัง
+    if(Array.isArray(data.billings)) histBillingsCache = data.billings;
     return true;
   }catch(e){
     storageOK = false;
@@ -1364,7 +1433,11 @@ function load(){
 /* ---- บันทึกสำนวน: โหมดทีมส่งขึ้นเซิร์ฟเวอร์ก่อน สำเร็จแล้วจึงแก้ข้อมูลในเครื่อง ---- */
 async function persistCase(record, changes, previousId, isNew){
   if(!TEAM_MODE){ save(); return {ok:true}; }
-  if(readOnly) throw new Error("กำลังอยู่ในโหมดอ่านอย่างเดียว — เชื่อมต่อเซิร์ฟเวอร์ไม่ได้");
+  if(readOnly){
+    throw new Error(syncing
+      ? "กำลังอัปเดตข้อมูลจากเซิร์ฟเวอร์ รออีกสักครู่แล้วกดบันทึกใหม่"
+      : "กำลังอยู่ในโหมดอ่านอย่างเดียว — เชื่อมต่อเซิร์ฟเวอร์ไม่ได้");
+  }
   const rec = {
     id: record.id, caseNumber: record.caseNumber, court: record.court,
     plaintiff: record.plaintiff, defendant: record.defendant, petitioner: record.petitioner,
@@ -1379,6 +1452,8 @@ async function persistCase(record, changes, previousId, isNew){
     verdictDate1:record.verdictDate1||"", appealExtend:record.appealExtend||"",
     verdictDate2:record.verdictDate2||"", supremeExtend:record.supremeExtend||"",
     appealFiled:record.appealFiled||"", supremeFiled:record.supremeFiled||"",
+    noticeSent:record.noticeSent||"", noticeAck:record.noticeAck||"",
+    motions:Array.isArray(record.motions)?record.motions:[],
     nextAppointment: nextApptDate(record), appointmentTime: nextApptTime(record),
     notes: record.notes,
     previousId: previousId || null,
@@ -1426,6 +1501,7 @@ async function bootLoad(){
   events = (r.events||[]).filter(e=>e.date);
   updateEventCount();
   if(r.billings) histBillingsCache = r.billings;
+  save();                       // เก็บสำเนาชุดล่าสุดไว้ใช้เปิดครั้งหน้าแบบไม่ต้องรอเน็ต
   return r;
 }
 
@@ -1502,6 +1578,7 @@ function isKnownStatus(v){ return STATUS_OPTIONS.includes(v); }
 function isKnownCaseType(v){ return CASE_TYPE_OPTIONS.includes(v); }
 function getStage(status){
   if(status === DONE_STATUS) return "closed";
+  if(PENDING_STATUSES.includes(status)) return "pending";
   if(APPEAL_STATUSES.includes(status)) return "appeal";
   if(SUPREME_STATUSES.includes(status)) return "supreme";
   if(ENFORCEMENT_STATUSES.includes(status)) return "enforcement";
@@ -1652,6 +1729,18 @@ const TH_DOW = ["อา","จ","อ","พ","พฤ","ศ","ส"];
 function toISO(y,m,d){
   return y+"-"+String(m+1).padStart(2,"0")+"-"+String(d).padStart(2,"0");
 }
+/**
+ * เปลี่ยนค่าวันที่ของ tdp จากโค้ด แล้วให้ช่องที่ผู้ใช้เห็นอัปเดตตาม
+ * (ตัวปฏิทินอ่านค่าจาก input hidden ถ้าแก้ค่าตรง ๆ ช่องแสดงผลจะไม่ขยับเอง)
+ */
+function syncDatePicker(valueEl){
+  if(!valueEl) return;
+  const tdp = valueEl.closest("[data-tdp]");
+  if(!tdp) return;
+  const display = tdp.querySelector(".tdp-display");
+  if(display) display.value = valueEl.value ? fmtDate(valueEl.value) : "";
+}
+
 function initDatePickers(root){
   (root||document).querySelectorAll("[data-tdp]").forEach(tdp=>{
     if(tdp.dataset.ready) return;
@@ -1761,7 +1850,7 @@ document.getElementById("backBtn").addEventListener("click", ()=>{
 function showView(name){
   document.querySelectorAll("nav.tabs button").forEach(b=>b.classList.toggle("active", b.dataset.view===name));
   document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
-  const map = {trial:"view-trial",appeal:"view-appeal",supreme:"view-supreme",
+  const map = {pending:"view-pending",trial:"view-trial",appeal:"view-appeal",supreme:"view-supreme",
                enforcement:"view-enforcement",closed:"view-closed",
                home:"view-home",add:"view-add",monthly:"view-monthly",summary:"view-summary",
                events:"view-events",detail:"view-detail"};
@@ -2098,6 +2187,35 @@ function openCase(id){
         </div>
         <div class="field"><label>ศาลฎีกา</label><input id="f-verdict3" value="${esc(c.verdict3)}"></div>
 
+        <div class="section-label">หนังสือบอกกล่าว (ก่อนฟ้อง)</div>
+        <div class="grid2">
+          <div class="field"><label>วันส่งหนังสือบอกกล่าว</label>
+            <div class="tdp" data-tdp>
+              <input type="text" class="tdp-display" readonly placeholder="เลือกวันที่">
+              <input type="hidden" class="tdp-value" id="f-noticeSent" value="${esc(c.noticeSent)}">
+              <div class="tdp-pop"></div>
+            </div>
+            <button type="button" class="btn ghost sm" style="margin-top:6px;"
+              onclick="noticeToAppt('f-noticeSent','ส่งหนังสือบอกกล่าว')">ใส่ในวันนัด</button>
+          </div>
+          <div class="field"><label>วันรับเอกสารตอบรับ</label>
+            <div class="tdp" data-tdp>
+              <input type="text" class="tdp-display" readonly placeholder="เลือกวันที่">
+              <input type="hidden" class="tdp-value" id="f-noticeAck" value="${esc(c.noticeAck)}">
+              <div class="tdp-pop"></div>
+            </div>
+            <button type="button" class="btn ghost sm" style="margin-top:6px;"
+              onclick="noticeToAppt('f-noticeAck','ได้รับใบตอบรับหนังสือบอกกล่าว')">ใส่ในวันนัด</button>
+          </div>
+        </div>
+
+        <div class="section-label">คำร้อง และคำสั่งศาล</div>
+        <div id="motionList">${(c.motions||[]).map(m=>motionRowHTML(m)).join("")}</div>
+        <button type="button" class="btn ghost sm" onclick="addMotionRow()">+ เพิ่มคำร้อง</button>
+        <div class="items-hint" style="margin-top:6px;">
+          ใส่วันที่ศาลสั่งและจำนวนวันที่ต้องปฏิบัติ ระบบจะคิดวันครบกำหนดและเพิ่มเข้าไปในวันนัดให้ทันที
+        </div>
+
         <div class="section-label">วันนัด</div>
         <div id="apptList">${(c.appointments||[]).map(a=>apptRowHTML(a)).join("")}</div>
         <button type="button" class="btn ghost sm" onclick="addApptRow()" style="margin-top:8px;">+ เพิ่มวันนัด</button>
@@ -2274,6 +2392,221 @@ function retryQRLib(){
 }
 
 /* ---- แถววันนัดหนึ่งรายการในหน้ารายละเอียด ---- */
+/* ============================================================
+   คำร้อง และคำสั่งศาล — หนึ่งแถวคือคำร้องหนึ่งฉบับ
+   เลือกคำสั่งแล้วใส่ว่าต้องปฏิบัติภายในกี่วัน ระบบคิดวันครบกำหนดให้
+   แล้วเติมเข้าไปในรายการวันนัดทันที
+   ============================================================ */
+
+/** หนึ่งแถวของคำร้อง/คำสั่ง */
+function motionRowHTML(m){
+  m = m || {motion:"", filedDate:"", order:"", orderDate:"", days:"", dueDate:"", note:""};
+  const knownMotion = !m.motion || MOTION_OPTIONS.includes(m.motion);
+  const knownOrder  = !m.order  || ORDER_OPTIONS.includes(m.order);
+  const done = m.dueDate && m.dueDate < todayISO();
+
+  return `<div class="motion-row${done?" past":""}">
+    <div class="motion-grid">
+      <div class="mfield">
+        <label>คำร้อง</label>
+        <select class="mo-motion-sel" onchange="toggleMotionOther(this)">
+          <option value="" ${!m.motion?"selected":""}>เลือกประเภทคำร้อง…</option>
+          ${MOTION_OPTIONS.map(o=>`<option ${o===m.motion?"selected":""}>${esc(o)}</option>`).join("")}
+          <option value="${MOTION_OTHER}" ${!knownMotion?"selected":""}>อื่นๆ ระบุ</option>
+        </select>
+        <input class="mo-motion" placeholder="ระบุชื่อคำร้อง"
+          value="${knownMotion?"":esc(m.motion)}" style="display:${knownMotion?"none":"block"};margin-top:6px;">
+      </div>
+      <div class="mfield">
+        <label>วันที่ยื่น</label>
+        <div class="tdp" data-tdp>
+          <input type="text" class="tdp-display" readonly placeholder="วันที่ยื่นคำร้อง">
+          <input type="hidden" class="tdp-value mo-filed" value="${esc(m.filedDate)}">
+          <div class="tdp-pop"></div>
+        </div>
+      </div>
+      <div class="mfield">
+        <label>คำสั่งศาล</label>
+        <select class="mo-order-sel" onchange="toggleMotionOther(this)">
+          <option value="" ${!m.order?"selected":""}>ยังไม่มีคำสั่ง…</option>
+          ${ORDER_OPTIONS.map(o=>`<option ${o===m.order?"selected":""}>${esc(o)}</option>`).join("")}
+          <option value="${MOTION_OTHER}" ${!knownOrder?"selected":""}>อื่นๆ ระบุ</option>
+        </select>
+        <input class="mo-order" placeholder="ระบุคำสั่งศาล"
+          value="${knownOrder?"":esc(m.order)}" style="display:${knownOrder?"none":"block"};margin-top:6px;">
+      </div>
+      <div class="mfield">
+        <label>วันที่ศาลสั่ง</label>
+        <div class="tdp" data-tdp>
+          <input type="text" class="tdp-display" readonly placeholder="วันที่มีคำสั่ง">
+          <input type="hidden" class="tdp-value mo-orderdate" value="${esc(m.orderDate)}" onchange="recalcMotionDue(this)">
+          <div class="tdp-pop"></div>
+        </div>
+      </div>
+      <div class="mfield">
+        <label>ต้องปฏิบัติภายใน (วัน)</label>
+        <input type="number" class="mo-days" min="0" placeholder="เช่น 7" value="${esc(m.days)}"
+               oninput="recalcMotionDue(this)">
+      </div>
+      <div class="mfield">
+        <label>ครบกำหนดปฏิบัติ</label>
+        <div class="tdp" data-tdp>
+          <input type="text" class="tdp-display" readonly placeholder="คิดให้อัตโนมัติ">
+          <input type="hidden" class="tdp-value mo-due" value="${esc(m.dueDate)}">
+          <div class="tdp-pop"></div>
+        </div>
+        <span class="mo-hint items-hint"></span>
+      </div>
+    </div>
+    <div class="motion-foot">
+      <input class="mo-note" placeholder="หมายเหตุ (ไม่บังคับ)" value="${esc(m.note||"")}">
+      <button type="button" class="btn ghost sm" onclick="motionToAppt(this)">ใส่ในวันนัด</button>
+      <button type="button" class="appt-del" title="ลบคำร้องนี้" onclick="this.closest('.motion-row').remove()">✕</button>
+    </div>
+  </div>`;
+}
+
+/** สลับช่องพิมพ์เองเมื่อเลือก "อื่นๆ ระบุ" */
+function toggleMotionOther(sel){
+  const cls = sel.classList.contains("mo-motion-sel") ? ".mo-motion" : ".mo-order";
+  const inp = sel.closest(".mfield").querySelector(cls);
+  if(inp) inp.style.display = (sel.value === MOTION_OTHER) ? "block" : "none";
+}
+
+function addMotionRow(){
+  const box = document.getElementById("motionList");
+  if(!box) return;
+  box.insertAdjacentHTML("beforeend", motionRowHTML(null));
+  initDatePickers(box);
+}
+
+/**
+ * คิดวันครบกำหนดปฏิบัติตามคำสั่ง = วันที่ศาลสั่ง + จำนวนวัน
+ * แล้วเติมวันนัดให้ทันที ตามที่ต้องการว่า "เลือกกี่วันแล้ววันนัดต้องขึ้นเลย"
+ */
+function recalcMotionDue(el){
+  const row = el.closest(".motion-row");
+  if(!row) return;
+  const base = row.querySelector(".mo-orderdate").value;
+  const days = parseInt(row.querySelector(".mo-days").value, 10);
+  const dueEl = row.querySelector(".mo-due");
+  const hint  = row.querySelector(".mo-hint");
+
+  if(!base || isNaN(days) || days < 0){
+    if(hint) hint.textContent = base ? "" : "ใส่วันที่ศาลสั่งก่อน";
+    return;
+  }
+  const d = new Date(base + "T00:00:00");
+  d.setDate(d.getDate() + days);
+  const due = toISO(d.getFullYear(), d.getMonth(), d.getDate());
+
+  dueEl.value = due;
+  syncDatePicker(dueEl);
+  if(hint) hint.textContent = "ครบกำหนด " + fmtDate(due);
+  addApptFromMotion(row, due);
+}
+
+/** เพิ่ม/อัปเดตวันนัดที่ผูกกับคำร้องแถวนี้ ไม่สร้างซ้ำถ้ามีอยู่แล้ว */
+function addApptFromMotion(row, due){
+  const box = document.getElementById("apptList");
+  if(!box || !due) return;
+
+  const motionSel = row.querySelector(".mo-motion-sel");
+  const motion = motionSel.value === MOTION_OTHER
+    ? (row.querySelector(".mo-motion").value.trim() || "คำร้อง")
+    : (motionSel.value || "คำร้อง");
+  const orderSel = row.querySelector(".mo-order-sel");
+  const order = orderSel.value === MOTION_OTHER
+    ? row.querySelector(".mo-order").value.trim()
+    : orderSel.value;
+  const note = "ปฏิบัติตามคำสั่งศาล: " + motion + (order ? " — " + order : "");
+
+  // แถวเดิมที่ระบบเคยสร้างให้คำร้องนี้ ให้แก้วันที่แทนการเพิ่มใหม่
+  let target = row._apptRow && box.contains(row._apptRow) ? row._apptRow : null;
+  if(!target){
+    target = [...box.querySelectorAll(".appt-row")].find(r=>{
+      const n = r.querySelector(".appt-note");
+      return n && n.value === note;
+    }) || null;
+  }
+  if(!target){
+    box.insertAdjacentHTML("beforeend", apptRowHTML({date:due, endDate:"", time:"", note}));
+    initDatePickers(box);
+    const rows = box.querySelectorAll(".appt-row");
+    target = rows[rows.length-1];
+    toast("เพิ่มวันนัด " + fmtDate(due) + " จากคำสั่งศาลแล้ว");
+  }else{
+    const dEl = target.querySelector(".appt-date");
+    dEl.value = due;
+    syncDatePicker(dEl);
+  }
+  const noteSel = target.querySelector(".appt-note-sel");
+  noteSel.value = APPT_OTHER;
+  const noteInp = target.querySelector(".appt-note");
+  noteInp.value = note;
+  noteInp.style.display = "block";
+  row._apptRow = target;
+}
+
+/** ปุ่ม "ใส่ในวันนัด" ของหนังสือบอกกล่าว — ส่งวันที่ที่กรอกไว้เข้าไปเป็นรายการนัด */
+function noticeToAppt(fieldId, subject){
+  const v = document.getElementById(fieldId).value;
+  if(!v){ toast("ยังไม่ได้เลือกวันที่ค่ะ"); return; }
+  const box = document.getElementById("apptList");
+  if(!box) return;
+
+  const dup = [...box.querySelectorAll(".appt-row")].some(r=>{
+    const n = r.querySelector(".appt-note");
+    return r.querySelector(".appt-date").value === v && n && n.value === subject;
+  });
+  if(dup){ toast("มีรายการนี้ในวันนัดอยู่แล้ว"); return; }
+
+  box.insertAdjacentHTML("beforeend", apptRowHTML({date:v, endDate:"", time:"", note:subject}));
+  initDatePickers(box);
+  const rows = box.querySelectorAll(".appt-row");
+  const last = rows[rows.length-1];
+  last.querySelector(".appt-note-sel").value = APPT_OTHER;
+  const inp = last.querySelector(".appt-note");
+  inp.value = subject;
+  inp.style.display = "block";
+  toast("เพิ่ม " + subject + " วันที่ " + fmtDate(v) + " ในวันนัดแล้ว");
+}
+
+/** ปุ่ม "ใส่ในวันนัด" — ใช้ตอนอยากเพิ่มเองโดยไม่ต้องแก้จำนวนวัน */
+function motionToAppt(btn){
+  const row = btn.closest(".motion-row");
+  const due = row.querySelector(".mo-due").value;
+  if(!due){ toast("ยังไม่มีวันครบกำหนด — ใส่วันที่ศาลสั่งและจำนวนวันก่อนค่ะ"); return; }
+  addApptFromMotion(row, due);
+}
+
+/** อ่านคำร้องทั้งหมดจากฟอร์ม */
+function collectMotions(){
+  const box = document.getElementById("motionList");
+  if(!box) return [];
+  return [...box.querySelectorAll(".motion-row")].map(row=>{
+    const ms = row.querySelector(".mo-motion-sel");
+    const os = row.querySelector(".mo-order-sel");
+    return {
+      motion:    ms.value === MOTION_OTHER ? row.querySelector(".mo-motion").value.trim() : ms.value,
+      filedDate: row.querySelector(".mo-filed").value,
+      order:     os.value === MOTION_OTHER ? row.querySelector(".mo-order").value.trim() : os.value,
+      orderDate: row.querySelector(".mo-orderdate").value,
+      days:      row.querySelector(".mo-days").value,
+      dueDate:   row.querySelector(".mo-due").value,
+      note:      row.querySelector(".mo-note").value.trim()
+    };
+  }).filter(m=>m.motion || m.filedDate || m.order);
+}
+
+/** สรุปคำร้องเป็นข้อความ ใช้เทียบว่ามีอะไรเปลี่ยน */
+function motionsSummary(list){
+  return (list||[]).map(m=>
+    [m.motion, m.filedDate?fmtDate(m.filedDate):"", m.order,
+     m.dueDate?"ครบ "+fmtDate(m.dueDate):""].filter(Boolean).join(" ")
+  ).join(" / ") || "—";
+}
+
 function apptRowHTML(a){
   a = a || {date:"", endDate:"", time:"", note:""};
   const past = a.date && apptEnd(a) < todayISO();
@@ -2407,6 +2740,13 @@ async function saveDetail(id){
     changes.push({field:"วันนัด", from:apptsBefore, to:apptsAfter});
   }
 
+  const newMotions = collectMotions();
+  const moBefore = motionsSummary(c.motions);
+  const moAfter  = motionsSummary(newMotions);
+  if(moBefore !== moAfter){
+    changes.push({field:"คำร้องและคำสั่งศาล", from:moBefore, to:moAfter});
+  }
+
   // สถานะเดินตาม "เรื่องที่นัด" ของนัดถัดไปอัตโนมัติ
   // ยกเว้นผู้ใช้เพิ่งเลือกสถานะเองในการบันทึกครั้งนี้ ให้ยึดที่เลือกไว้
   const pickedStatusManually = (statusVal !== c.status);
@@ -2430,6 +2770,7 @@ async function saveDetail(id){
   if(previousId) c.id = newId;
   Object.assign(c, newValues);
   c.appointments = newAppts;
+  c.motions = newMotions;
   c.editLog = c.editLog || [];
   c.editLog.push({date:new Date().toISOString(), changes, user:session.user||""});
 
@@ -5223,33 +5564,76 @@ function showGate(msg, isInfo){
 
 }
 
-async function enterApp(){
+/**
+ * เปิดแอปแบบ local-first
+ * วาดจากสำเนาในเครื่องก่อนทันที (ไม่รอเน็ต) แล้วค่อยซิงค์กับเซิร์ฟเวอร์เบื้องหลัง
+ * ได้ข้อมูลใหม่แล้วค่อยวาดทับ ถ้าไม่มีอะไรเปลี่ยนก็ไม่ต้องวาดใหม่
+ *
+ * @param {boolean} freshLogin  true = เพิ่งกรอกรหัสผ่าน ต้องรอผลตรวจก่อนถึงจะถือว่าเข้าได้
+ */
+async function enterApp(freshLogin){
   document.getElementById("gate").style.display = "none";
   document.getElementById("app").style.display = "";
   document.getElementById("refreshBtn").style.display = "";
   document.getElementById("logoutBtn").style.display = "";
   refreshIdHint();
-  setSyncState("busy");
-  try{
-    await bootLoad();           // ยืนยันตัวตน + สำนวน + นัดอื่น + ใบวางบิล ในรอบเดียว
-    refreshIdHint();
-    openRequestedCase();
-  }catch(err){
-    // รหัสผ่านไม่ถูกต้อง — ต้องเด้งกลับหน้าใส่รหัส ไม่ใช่เข้าแอปแบบอ่านอย่างเดียว
-    if(err.code === "AUTH"){
-      document.getElementById("app").style.display = "none";
-      document.getElementById("gate").style.display = "";
-      throw err;
+
+  // ---- ขั้นที่ ๑: วาดจากสำเนาในเครื่องทันที ----
+  // ยังไม่ให้แก้ไขจนกว่าจะซิงค์เสร็จ กันไม่ให้แก้ทับข้อมูลเก่าแล้วโดนของใหม่เขียนทับ
+  let hadLocal = false;
+  if(!freshLogin){
+    hadLocal = load();
+    if(hadLocal){
+      readOnly = true;
+      updateCounts();
+      updateEventCount();
+      refreshCurrentView();
+      openRequestedCase();
+      syncing = true;
+      setSyncState("busy", "กำลังอัปเดตข้อมูล… (ดูได้ก่อน ยังแก้ไม่ได้)");
     }
-    // ดึงข้อมูลใหม่ไม่ได้ — ใช้สำเนาในเครื่องแบบอ่านอย่างเดียว (รวมนัดอื่นด้วย)
-    readOnly = true;
-    const had = load();
-    updateCounts();
-    updateEventCount();
-    setSyncState("bad", "เชื่อมต่อไม่ได้ — " + (had ? "แสดงข้อมูลชุดล่าสุดที่เคยโหลด (แก้ไขไม่ได้)" : "ยังไม่มีข้อมูลในเครื่อง"));
-    toast("เชื่อมต่อเซิร์ฟเวอร์ไม่ได้: " + err.message);
-    openRequestedCase();
   }
+  if(!hadLocal) setSyncState("busy");
+
+  // ---- ขั้นที่ ๒: ซิงค์กับเซิร์ฟเวอร์ ----
+  const syncJob = bootLoad().then(()=>{
+    syncing = false;
+    refreshIdHint();
+    if(hadLocal) refreshCurrentView();     // ข้อมูลใหม่มาถึงแล้ว วาดทับของเก่า
+    else openRequestedCase();
+  });
+
+  // มีสำเนาในเครื่องอยู่แล้ว ไม่ต้องยืนหยุดรอ ปล่อยให้ซิงค์ทำงานไป
+  if(hadLocal){
+    syncJob.catch(err=>{ syncing = false; handleBootError(err, true); });
+    return;
+  }
+  try{ await syncJob; }
+  catch(err){ syncing = false; handleBootError(err, false); }
+}
+
+/** ซิงค์ไม่สำเร็จ — แยกกรณีรหัสผิด กับกรณีเน็ตมีปัญหา */
+function handleBootError(err, hadLocal){
+  if(err && err.code === "AUTH"){
+    // รหัสผ่านไม่ถูกต้อง (หรือถูกเปลี่ยนไปแล้ว) ต้องเด้งกลับหน้าใส่รหัส
+    // จัดการให้จบตรงนี้ ไม่โยนต่อ เพราะตอนซิงค์เบื้องหลังไม่มีใครรับ error
+    syncing = false;
+    readOnly = true;
+    session.passcode = "";
+    saveSession();
+    document.getElementById("app").style.display = "none";
+    document.getElementById("gate").style.display = "";
+    showGate(err.message || "รหัสผ่านไม่ถูกต้อง");
+    return;
+  }
+  readOnly = true;
+  const had = hadLocal || load();
+  updateCounts();
+  updateEventCount();
+  if(had) refreshCurrentView();
+  setSyncState("bad", "เชื่อมต่อไม่ได้ — " + (had ? "แสดงข้อมูลชุดล่าสุดที่เคยโหลด (แก้ไขไม่ได้)" : "ยังไม่มีข้อมูลในเครื่อง"));
+  toast("เชื่อมต่อเซิร์ฟเวอร์ไม่ได้: " + (err ? err.message : ""));
+  if(!hadLocal) openRequestedCase();
 }
 
 async function attemptLogin(){
@@ -5262,7 +5646,7 @@ async function attemptLogin(){
   try{
     // ตรวจรหัสผ่านไปพร้อมกับโหลดข้อมูลในรอบเดียว — รหัสผิดจะได้ error AUTH กลับมาเอง
     // ชื่อผู้ใช้มาจากเซิร์ฟเวอร์ตามรหัสที่ใช้เข้า ไม่ได้ให้ผู้ใช้พิมพ์เอง
-    await enterApp();
+    await enterApp(true);   // ล็อกอินครั้งแรก ต้องรอผลตรวจก่อน ไม่ใช้สำเนาในเครื่อง
   }catch(err){
     session.passcode = "";
     if(err.code === "AUTH") showGate(err.message || "รหัสผ่านไม่ถูกต้อง");
