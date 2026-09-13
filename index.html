@@ -1325,7 +1325,7 @@ function showApiTimings(){
     <div class="doctitle" style="font-size:14pt;margin-top:18px;">10 ครั้งล่าสุด</div>
     <table><thead><tr><th>คำสั่ง</th><th style="width:16%">เวลา</th>
       <th style="width:16%">ลองใหม่</th><th style="width:16%">ผล</th></tr></thead>
-      <tbody>${last}</tbody></table>`);
+      <tbody>${last}</tbody></table>`, {watermark:false});
 }
 
 /**
@@ -3886,7 +3886,15 @@ function docDateThai(iso){
 }
 
 /** เปิดหน้าต่างพิมพ์เอกสาร (ใช้ร่วมกันทั้งใบเสนอราคา/ใบเสร็จ) */
-function openDocPrintWindow(title, bodyHtml){
+/**
+ * เปิดหน้าต่างพิมพ์เอกสาร
+ * @param {string} title     ชื่อหน้าต่าง
+ * @param {string} bodyHtml  เนื้อเอกสาร
+ * @param {object} [opts]    {watermark:false} = ไม่ต้องใส่ลายน้ำ (ใช้กับรายงานภายใน)
+ */
+function openDocPrintWindow(title, bodyHtml, opts){
+  const useWatermark = !(opts && opts.watermark === false);
+  const logoSrc = document.querySelector("header.top .logo").src;
   const w = window.open("", "_blank");
   if(!w){ toast("เบราว์เซอร์บล็อกหน้าต่างใหม่ — อนุญาต popup แล้วลองใหม่"); return; }
   w.document.write(`<!DOCTYPE html><html lang="th"><head><meta charset="UTF-8">
@@ -3915,7 +3923,24 @@ function openDocPrintWindow(title, bodyHtml){
     .signblock2{margin-top:56px;display:flex;justify-content:space-between;gap:20px;font-size:14pt;text-align:center;}
     .signblock2 .signcol{flex:1;}
     .signblock2 .line{border-bottom:1px dotted #444;width:220px;margin:0 auto 6px;height:26px;}
-  </style></head><body>${bodyHtml}</body></html>`);
+
+    /* ---- ลายน้ำโลโก้ ----
+       ใช้ position:fixed เพื่อให้ลายน้ำติดไปทุกหน้าเวลาพิมพ์หลายแผ่น
+       print-color-adjust:exact บังคับให้เบราว์เซอร์พิมพ์สีจาง ๆ ออกมาจริง
+       ไม่งั้นบางตัวจะตัดทิ้งเพราะคิดว่าเป็นพื้นหลัง */
+    .watermark{
+      position:fixed; top:50%; left:50%;
+      transform:translate(-50%,-50%) rotate(-30deg);
+      width:110mm; max-width:75%; opacity:.07;
+      z-index:0; pointer-events:none;
+      -webkit-print-color-adjust:exact; print-color-adjust:exact;
+    }
+    .sheet{position:relative; z-index:1;}   /* เนื้อเอกสารอยู่เหนือลายน้ำเสมอ */
+    @media print{ .watermark{opacity:.06;} }
+  </style></head><body>
+    ${useWatermark ? `<img class="watermark" src="${logoSrc}" alt="">` : ``}
+    <div class="sheet">${bodyHtml}</div>
+  </body></html>`);
   w.document.close();
   setTimeout(()=>{ w.focus(); w.print(); }, 200);
 }
@@ -4450,7 +4475,7 @@ function printPeriodSummary(tab){
       <div class="signcol"><div class="line"></div>ผู้ตรวจสอบ<br>วันที่ ..................................</div>
     </div>
   `;
-  openDocPrintWindow((isBill?"สรุปยอดวางบิล ":"สรุปยอดรับเงิน ") + periodTxt, body);
+  openDocPrintWindow((isBill?"สรุปยอดวางบิล ":"สรุปยอดรับเงิน ") + periodTxt, body, {watermark:false});
 }
 
 /** หนังสือทวงถามให้ชำระหนี้ ออกจากใบวางบิลที่เลยกำหนดแล้ว */
