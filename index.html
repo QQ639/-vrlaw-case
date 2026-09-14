@@ -3965,7 +3965,7 @@ function buildQuoteBody(data){
   return `
     <div class="head">
       <img src="${document.querySelector('header.top .logo').src}">
-      <div class="office">สำนักกฎหมาย วีอาร์ลอว์<small>๕/๒๓ หมู่ที่ ๑๑ ตำบลบางน้ำผึ้ง อำเภอพระประแดง จังหวัดสมุทรปราการ · โทร ๐๘๐๒๗๖๗๕๕๕</small><small>ใบเสนอราคา · เลขที่ ${data.docNo}</small></div>
+      <div class="office">สำนักกฎหมาย วีอาร์ลอว์<small>๕/๒๓ หมู่ที่ ๑๑ ตำบลบางน้ำผึ้ง อำเภอพระประแดง จังหวัดสมุทรปราการ · โทร ๐๘๐๒๗๖๗๕๕๕</small></div>
     </div>
     <div class="doctitle">ใบเสนอราคา</div>
     ${voidStamp(data)}
@@ -4049,7 +4049,7 @@ function buildReceiptBody(data){
   return `
     <div class="head">
       <img src="${document.querySelector('header.top .logo').src}">
-      <div class="office">สำนักกฎหมาย วีอาร์ลอว์<small>๕/๒๓ หมู่ที่ ๑๑ ตำบลบางน้ำผึ้ง อำเภอพระประแดง จังหวัดสมุทรปราการ · โทร ๐๘๐๒๗๖๗๕๕๕</small><small>ใบเสร็จรับเงิน · เลขที่ ${data.docNo}</small></div>
+      <div class="office">สำนักกฎหมาย วีอาร์ลอว์<small>๕/๒๓ หมู่ที่ ๑๑ ตำบลบางน้ำผึ้ง อำเภอพระประแดง จังหวัดสมุทรปราการ · โทร ๐๘๐๒๗๖๗๕๕๕</small></div>
     </div>
     <div class="doctitle">ใบเสร็จรับเงิน</div>
     ${voidStamp(data)}
@@ -4135,7 +4135,7 @@ function buildBillingBody(data){
   return `
     <div class="head">
       <img src="${document.querySelector('header.top .logo').src}">
-      <div class="office">สำนักกฎหมาย วีอาร์ลอว์<small>๕/๒๓ หมู่ที่ ๑๑ ตำบลบางน้ำผึ้ง อำเภอพระประแดง จังหวัดสมุทรปราการ · โทร ๐๘๐๒๗๖๗๕๕๕</small><small>ใบวางบิล · เลขที่ ${data.docNo}</small></div>
+      <div class="office">สำนักกฎหมาย วีอาร์ลอว์<small>๕/๒๓ หมู่ที่ ๑๑ ตำบลบางน้ำผึ้ง อำเภอพระประแดง จังหวัดสมุทรปราการ · โทร ๐๘๐๒๗๖๗๕๕๕</small></div>
     </div>
     <div class="doctitle">ใบวางบิล / ใบแจ้งหนี้</div>
     ${voidStamp(data)}
@@ -4796,7 +4796,7 @@ function buildContractBody(data){
       <div style="font-size:12pt;">โทรศัพท์ ๐๙๕๙๔๕๔๕๔๑, ๐๘๐๒๗๖๗๕๕๕</div>
     </div>
     <div style="text-align:center;font-size:18pt;font-weight:700;margin:14px 0 4px;">สัญญาจ้างทำของ</div>
-    <div style="text-align:center;font-size:12pt;color:#555;margin-bottom:16px;">เลขที่ ${data.docNo}</div>
+    <div style="text-align:right;font-size:12pt;color:#555;margin:-8px 0 16px;">เลขที่ ${data.docNo}</div>
     ${voidStamp(data)}
     <div style="text-align:right;margin-bottom:14px;">วันที่ ${dayTH} เดือน ${esc(monthTH)} พ.ศ. ${yearTH}</div>
 
