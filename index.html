@@ -843,7 +843,7 @@
     <h3>ใบเสนอราคา</h3>
     <p class="hint">กรอกแล้วกดพิมพ์ — ระบบรันเลขที่ให้อัตโนมัติ ไม่บันทึกเนื้อหาไว้ในระบบ</p>
     <div class="drow">
-      <div class="dfield"><label>วันที่ออกใบเสนอราคา</label><input type="date" id="q-date"></div>
+      <div class="dfield"><label>วันที่ออกใบเสนอราคา</label><div class="tdp" data-tdp><input type="text" class="tdp-display" readonly placeholder="วันที่ออกใบเสนอราคา"><input type="hidden" class="tdp-value" id="q-date"><div class="tdp-pop"></div></div></div>
       <div class="dfield"><label>อายุใบเสนอราคา (วัน)</label><input type="number" id="q-validdays" value="30" min="1"></div>
     </div>
     <div class="drow">
@@ -893,7 +893,7 @@
     <h3>ใบเสร็จรับเงิน</h3>
     <p class="hint">กรอกแล้วกดพิมพ์ — ระบบรันเลขที่ให้อัตโนมัติ ไม่บันทึกเนื้อหาไว้ในระบบ</p>
     <div class="drow">
-      <div class="dfield"><label>วันที่รับเงิน</label><input type="date" id="r-date"></div>
+      <div class="dfield"><label>วันที่รับเงิน</label><div class="tdp" data-tdp><input type="text" class="tdp-display" readonly placeholder="วันที่รับเงิน"><input type="hidden" class="tdp-value" id="r-date"><div class="tdp-pop"></div></div></div>
       <div class="dfield">
         <label>วิธีชำระ</label>
         <select id="r-method">
@@ -944,7 +944,7 @@
     <h3>ใบวางบิล</h3>
     <p class="hint">กรอกแล้วกดพิมพ์ — ระบบรันเลขที่ให้อัตโนมัติ (BL001/2569) และบันทึกลงชีต “ใบวางบิล” ดูย้อนหลังได้ที่ประวัติเอกสาร</p>
     <div class="drow">
-      <div class="dfield"><label>วันที่วางบิล</label><input type="date" id="b-date"></div>
+      <div class="dfield"><label>วันที่วางบิล</label><div class="tdp" data-tdp><input type="text" class="tdp-display" readonly placeholder="วันที่วางบิล"><input type="hidden" class="tdp-value" id="b-date"><div class="tdp-pop"></div></div></div>
       <div class="dfield"><label>กำหนดชำระภายใน (วัน)</label><input type="number" id="b-creditdays" value="15" min="0"></div>
     </div>
     <div class="drow">
@@ -1000,7 +1000,7 @@
     <fieldset>
       <legend>คู่สัญญา</legend>
       <div class="drow">
-        <div class="dfield"><label>วันที่ทำสัญญา</label><input type="date" id="k-date"></div>
+        <div class="dfield"><label>วันที่ทำสัญญา</label><div class="tdp" data-tdp><input type="text" class="tdp-display" readonly placeholder="วันที่ทำสัญญา"><input type="hidden" class="tdp-value" id="k-date"><div class="tdp-pop"></div></div></div>
         <div class="dfield"><label>ชื่อผู้ว่าจ้าง</label><input id="k-client" placeholder="เช่น นายสมชาย ใจดี"></div>
       </div>
       <div class="drow">
@@ -1278,10 +1278,17 @@ const SESSION_KEY = "vrlaw_session_v1";
 let session = { passcode:"", user:"", role:"user" };
 
 /** ซ่อน/โชว์ปุ่มที่จำกัดสิทธิ์เฉพาะ admin ตาม role ปัจจุบัน — เรียกทุกครั้งหลังรู้ role แล้ว */
+/**
+ * เรื่องการเงินสงวนไว้ให้ admin เท่านั้น
+ * ซ่อนปุ่มทั้งหมดที่เกี่ยวกับเอกสารการเงิน — ทั้งออกเอกสารและดูย้อนหลัง
+ * (ด่านจริงอยู่ที่เซิร์ฟเวอร์ ตรงนี้แค่ไม่ให้เห็นปุ่มที่กดไปก็ถูกปฏิเสธ)
+ */
 function applyRolePermissions(){
   const isAdmin = !TEAM_MODE || session.role === "admin";
-  const btn = document.getElementById("btnDocHistory");
-  if(btn) btn.style.display = isAdmin ? "" : "none";
+  ["btnQuote","btnReceipt","btnBilling","btnContract","btnDocHistory"].forEach(id=>{
+    const b = document.getElementById(id);
+    if(b) b.style.display = isAdmin ? "" : "none";
+  });
 }
 let readOnly = false;          // จริงเมื่อดึงข้อมูลจากเซิร์ฟเวอร์ไม่ได้ และใช้สำเนาในเครื่องแทน
 let syncing  = false;          // จริงระหว่างรอข้อมูลรอบแรก ตอนที่กำลังโชว์สำเนาในเครื่องอยู่
@@ -1789,8 +1796,9 @@ function initDatePickers(root){
       const today = new Date(); const todayISO = toISO(today.getFullYear(),today.getMonth(),today.getDate());
       const nowBE = currentBE();
       const viewBE = vy + 543;
-      const startBE = 2569;
-      const endBE = Math.max(2580, nowBE + 11);   // กันระบบตันถ้าใช้ยาวเกินปี 2580
+      // ช่วงปีที่ให้เลือก: ปีปัจจุบัน -2 ถึง +3 (พอสำหรับคดีเก่าและวันนัดล่วงหน้า)
+      const startBE = nowBE - 2;
+      const endBE   = nowBE + 3;
       const yearSet = new Set();
       for(let y = startBE; y <= endBE; y++) yearSet.add(y);
       yearSet.add(viewBE);              // กันกรณีเลื่อนลูกศรออกนอกช่วง
@@ -2251,8 +2259,9 @@ function openCase(id){
           ${(!TEAM_MODE || session.role==="admin") ? `<button class="btn danger sm" onclick="deleteCase('${esc(c.id)}')">ลบสำนวน</button>` : ""}
         </div>
 
+        ${(!TEAM_MODE || session.role === "admin") ? `
         <div class="section-label">เอกสารการเงินของสำนวนนี้</div>
-        <div id="caseDocsBox"><div class="items-hint">กำลังรวบรวม…</div></div>
+        <div id="caseDocsBox"><div class="items-hint">กำลังรวบรวม…</div></div>` : ``}
 
         <div class="section-label">ประวัติการแก้ไข</div>
         <div id="editLogBox">${logList}</div>
@@ -2299,10 +2308,7 @@ async function ensureDocCaches(){
 async function renderCaseDocs(caseId){
   const box = document.getElementById("caseDocsBox");
   if(!box) return;
-  if(TEAM_MODE && session.role !== "admin"){
-    box.innerHTML = `<div class="items-hint">เฉพาะผู้ดูแลระบบจึงจะเห็นเอกสารการเงิน</div>`;
-    return;
-  }
+  if(TEAM_MODE && session.role !== "admin") return;   // user ไม่เห็นเรื่องการเงินเลย
 
   await ensureDocCaches();
   if(!document.getElementById("caseDocsBox")) return;   // ผู้ใช้เปิดหน้าอื่นไปแล้ว
@@ -3764,7 +3770,8 @@ function billFromQuote(idx){
   if(!q) return;
   closeDocModal("history");
   clearDocForm("b", ["client","addr","contact","caseno","court","items","note","payinfo"]);
-  document.getElementById("b-date").value   = todayISO();
+  document.getElementById("b-date").value = todayISO();
+  syncDatePicker(document.getElementById("b-date"));
   document.getElementById("b-client").value = q.client || "";
   document.getElementById("b-addr").value   = q.address || "";
   document.getElementById("b-vat").checked  = !!q.vat;
@@ -3786,7 +3793,8 @@ function receiptFromBilling(idx){
 
   closeDocModal("history");
   clearDocForm("r", ["payer","items"]);
-  document.getElementById("r-date").value  = todayISO();
+  document.getElementById("r-date").value = todayISO();
+  syncDatePicker(document.getElementById("r-date"));
   document.getElementById("r-payer").value = b.client || "";
   document.getElementById("r-items").value = `ชำระตามใบวางบิลเลขที่ ${b.docNo||""} : ${owed}`;
   docSource.receipt = { srcId:b.id, srcDocNo:b.docNo };
@@ -3799,9 +3807,13 @@ function receiptFromBilling(idx){
 function openDocModal(type){
   const cfg = DOC_MODAL_MAP_[type];
   const bg = document.getElementById(cfg.bg);
+  initDatePickers(bg);                 // ปฏิทินไทยในหน้าต่างนี้ ติดตั้งครั้งเดียวพอ
   if(cfg.date){
     const dateInput = document.getElementById(cfg.date);
-    if(dateInput && !dateInput.value) dateInput.value = todayISO();
+    if(dateInput && !dateInput.value){
+      dateInput.value = todayISO();
+      syncDatePicker(dateInput);       // อัปเดตช่องที่ผู้ใช้เห็นให้ตรงกับค่าที่ตั้ง
+    }
   }
   if(["quote","receipt","billing","contract"].includes(type)) fillCasePickers();
   bg.classList.add("show");
