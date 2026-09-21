@@ -3955,16 +3955,16 @@ function openDocPrintWindow(title, bodyHtml, opts){
 
     /* ---- ลายน้ำโลโก้ (ให้เหมือนหน้าปก) ----
        ใช้ position:fixed เพื่อให้ลายน้ำติดไปทุกหน้าเวลาพิมพ์หลายแผ่น
-       วางตรงกลางหน้า ไม่เอียง ขนาด/ความจางเท่ากับคลาส .wm ของหน้าปก
+       วางตรงกลางหน้า ไม่เอียง แบบเดียวกับ .wm ของหน้าปก
+       ความจาง .08 (ไม่ใช้ .055 ของหน้าปก เพราะเอกสารการเงินมีตัวอักษรน้อยกว่า ลายน้ำจะจางจนมองไม่เห็น)
        print-color-adjust:exact บังคับให้เบราว์เซอร์พิมพ์สีจาง ๆ ออกมาจริง
        ไม่งั้นบางตัวจะตัดทิ้งเพราะคิดว่าเป็นพื้นหลัง */
     html,body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
     .watermark{
       position:fixed; left:50%; top:50%;
       transform:translate(-50%,-50%);
-      width:420px; height:420px; max-width:75%;
-      object-fit:contain;
-      opacity:.055; z-index:0; pointer-events:none;
+      width:110mm; height:auto; max-width:75%;
+      opacity:.08; z-index:0; pointer-events:none;
       -webkit-print-color-adjust:exact; print-color-adjust:exact;
     }
     .sheet{position:relative; z-index:1;}   /* เนื้อเอกสารอยู่เหนือลายน้ำเสมอ */
