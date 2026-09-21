@@ -3300,6 +3300,35 @@ function partiesShort(c){
   if(a && b) return a+"/"+b;
   return a || b || p || c.caseNumber || "—";
 }
+/* ============================================================
+   ตัวช่วยย่อข้อความของ "ตารางพิมพ์" — ใช้ร่วมกันสองที่
+   คือตารางสรุปสำนวน (printSummary) และตารางนัดรายเดือน (printMonthly)
+   เป้าหมาย: หนึ่งรายการจบใน ๑–๒ บรรทัด ไม่ให้แถวยืดจนเปลืองกระดาษ
+   ใช้ตอนพิมพ์เท่านั้น ไม่กระทบข้อมูลจริงหรือหน้าจอ
+   ชื่อไม่ซ้ำกับ shortName()/partiesShort() เดิมที่หน้าปฏิทินใช้อยู่
+   ============================================================ */
+function cutTxt(v, n){
+  const t = String(v==null?"":v).replace(/\s+/g," ").trim();
+  return t.length > n ? t.slice(0,n-1)+"…" : t;
+}
+/* ชื่อคู่ความแบบย่อ: ตัดคำนำหน้าออก เหลือชื่อ แล้วจำกัดความยาว
+   ถ้ามีหลายคน (มี "กับพวก" หรือคั่นด้วย , หรือ และ) เก็บคนแรก + "กับพวก" */
+function shortPartyName(v, n){
+  n = n || 22;
+  let t = String(v==null?"":v).replace(/\s+/g," ").trim();
+  if(!t) return "";
+  t = t.replace(/^(นาย|นาง|นางสาว|น\.ส\.|ด\.ช\.|ด\.ญ\.|บริษัท|ห้างหุ้นส่วนจำกัด|หจก\.|บมจ\.)\s*/,"");
+  const many = /กับพวก|,|\sและ\s/.test(t);
+  t = t.split(/\s*(?:,|\sและ\s|กับพวก)\s*/)[0];
+  return cutTxt(t,n) + (many ? " กับพวก" : "");
+}
+/* จ. = โจทก์, ล. = จำเลย */
+function partiesShortPrint(c){
+  const p = [];
+  if(c.plaintiff) p.push("จ. "+shortPartyName(c.plaintiff));
+  if(c.defendant) p.push("ล. "+shortPartyName(c.defendant));
+  return p.length ? p.join(" / ") : "—";
+}
 function timeClass(t){
   return t==="เช้า" ? "t-morning" : t==="บ่าย" ? "t-afternoon" : t==="เย็น" ? "t-evening" : "";
 }
@@ -3448,15 +3477,16 @@ function printSummary(){
   // แถวทั้งหมดในตารางเดียว เดี๋ยวให้หน้าต่างพิมพ์ไปวัดความสูงจริงแล้วตัดหน้าเอง
   const trs = list.map((c,i)=>{
     const a = nextAppt(c);
+    const cl = v=>`<div class="cl">${v}</div>`;   /* จำกัดไม่ให้เกิน ๒ บรรทัด */
     return `<tr>
       <td class="c">${toThaiNum(i+1)}</td>
       <td class="c">${esc(toThaiNum(c.seqNo||"—"))}</td>
-      <td>${esc(toThaiNum(c.caseNumber))}</td>
-      <td>${esc(partiesDisplay(c))}</td>
-      <td>${esc(c.court||"—")}</td>
-      <td>${esc(c.status||"—")}</td>
-      <td>${a?esc(coverApptLine(a)):"—"}</td>
-      <td>${esc(c.lawyer)}</td>
+      <td>${cl(esc(toThaiNum(c.caseNumber)))}</td>
+      <td>${cl(esc(partiesShortPrint(c)))}</td>
+      <td>${cl(esc(cutTxt(c.court||"—",34)))}</td>
+      <td>${cl(esc(cutTxt(c.status||"—",28)))}</td>
+      <td>${cl(a?esc(cutTxt(coverApptLine(a),40)):"—")}</td>
+      <td>${cl(esc(cutTxt(c.lawyer,18)))}</td>
     </tr>`;
   }).join("");
 
@@ -3488,9 +3518,13 @@ function printSummary(){
     html,body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
     body{
       font-family:"TH Sarabun New","Sarabun","Angsana New",sans-serif;
-      font-size:16pt;color:#000;margin:0;
+      font-size:13pt;color:#000;margin:0;
       width:400mm;                 /* เท่าความกว้างจริงของ A3 แนวนอนหักขอบ — วัดความสูงแล้วตรงกับตอนพิมพ์ */
     }
+    /* ทุกช่องในตารางถูกจำกัดไม่ให้เกิน ๒ บรรทัด ส่วนที่เกินตัดทิ้งพร้อมจุดไข่ปลา
+       ทำให้ความสูงแถวคงที่ คดีหนึ่งจบใน ๑–๒ บรรทัดเสมอ ไม่ว่าชื่อคู่ความจะยาวแค่ไหน */
+    .cl{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+        overflow:hidden;text-overflow:ellipsis;}
     .page{page-break-after:always;}
     .page:last-child{page-break-after:auto;}
     .head{display:flex;align-items:center;gap:12px;border-bottom:2pt solid #000;
@@ -3500,9 +3534,9 @@ function printSummary(){
     .office small{display:block;font-weight:400;font-size:14pt;}
     .pg{font-size:14pt;font-weight:600;white-space:nowrap;}
     table{width:100%;border-collapse:collapse;table-layout:fixed;}
-    th,td{border:1px solid #000;padding:4px 7px;font-size:16pt;vertical-align:top;
-          line-height:1.2;word-wrap:break-word;}
-    th{background:#e8f2ef;font-weight:700;text-align:center;font-size:15pt;}
+    th,td{border:1px solid #000;padding:2px 6px;font-size:13pt;vertical-align:top;
+          line-height:1.15;word-wrap:break-word;}
+    th{background:#e8f2ef;font-weight:700;text-align:center;font-size:12.5pt;}
     td.c{text-align:center;}
     tbody tr{page-break-inside:avoid;}
     tbody tr:nth-child(even){background:#f7faf9;}
@@ -3584,25 +3618,25 @@ function printMonthly(){
     const timeTxt = esc((it.a && it.a.time) || "ทั้งวัน");
     let mainTxt, placeTxt, noteTxt, personTxt;
     if(it.ev){
-      mainTxt = esc(it.ev.title) + (it.ev.kind ? " [" + esc(it.ev.kind) + "]" : "");
-      placeTxt = esc(it.ev.place || "");
+      mainTxt = esc(cutTxt(it.ev.title,44)) + (it.ev.kind ? " [" + esc(cutTxt(it.ev.kind,14)) + "]" : "");
+      placeTxt = esc(cutTxt(it.ev.place || "",34));
       noteTxt = "";
-      personTxt = esc(it.ev.people || "");
+      personTxt = esc(cutTxt(it.ev.people || "",22));
     } else {
-      mainTxt = esc(partiesDisplay(it.c)) + " · " + esc(toThaiNum(it.c.caseNumber||it.c.seqNo||""));
-      placeTxt = esc(it.c.court || "");
-      noteTxt = esc(it.a.note || "");
-      personTxt = esc(it.c.lawyer || "");
+      mainTxt = esc(partiesShortPrint(it.c)) + " · " + esc(toThaiNum(it.c.caseNumber||it.c.seqNo||""));
+      placeTxt = esc(cutTxt(it.c.court || "",34));
+      noteTxt = esc(cutTxt(it.a.note || "",42));
+      personTxt = esc(cutTxt(it.c.lawyer || "",22));
     }
     const contMark = it.isStart ? "" : " (ต่อเนื่อง)";
     return `<tr${it.isStart?"":' style="font-style:italic;color:#666;"'}>
       <td class="c">${toThaiNum(i+1)}</td>
       <td class="c">${dateTxt}${contMark}</td>
       <td class="c">${timeTxt}</td>
-      <td>${mainTxt}</td>
-      <td>${placeTxt}</td>
-      <td>${noteTxt}</td>
-      <td>${personTxt}</td>
+      <td><div class="cl">${mainTxt}</div></td>
+      <td><div class="cl">${placeTxt}</div></td>
+      <td><div class="cl">${noteTxt}</div></td>
+      <td><div class="cl">${personTxt}</div></td>
     </tr>`;
   }).join("");
 
@@ -3633,9 +3667,13 @@ function printMonthly(){
     html,body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
     body{
       font-family:"TH Sarabun New","Sarabun","Angsana New",sans-serif;
-      font-size:16pt;color:#000;margin:0;
+      font-size:13pt;color:#000;margin:0;
       width:400mm;                 /* เท่าความกว้างจริงของ A3 แนวนอนหักขอบ — วัดความสูงแล้วตรงกับตอนพิมพ์ */
     }
+    /* ทุกช่องในตารางถูกจำกัดไม่ให้เกิน ๒ บรรทัด ส่วนที่เกินตัดทิ้งพร้อมจุดไข่ปลา
+       ทำให้ความสูงแถวคงที่ นัดหนึ่งจบใน ๑–๒ บรรทัดเสมอ */
+    .cl{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+        overflow:hidden;text-overflow:ellipsis;}
     .page{page-break-after:always;}
     .page:last-child{page-break-after:auto;}
     .head{display:flex;align-items:center;gap:12px;border-bottom:2pt solid #000;
@@ -3645,9 +3683,9 @@ function printMonthly(){
     .office small{display:block;font-weight:400;font-size:14pt;}
     .pg{font-size:14pt;font-weight:600;white-space:nowrap;}
     table{width:100%;border-collapse:collapse;table-layout:fixed;}
-    th,td{border:1px solid #000;padding:4px 7px;font-size:16pt;vertical-align:top;
-          line-height:1.2;word-wrap:break-word;}
-    th{background:#e8f2ef;font-weight:700;text-align:center;font-size:15pt;}
+    th,td{border:1px solid #000;padding:2px 6px;font-size:13pt;vertical-align:top;
+          line-height:1.15;word-wrap:break-word;}
+    th{background:#e8f2ef;font-weight:700;text-align:center;font-size:12.5pt;}
     td.c{text-align:center;white-space:nowrap;}
     tbody tr{page-break-inside:avoid;}
     tbody tr:nth-child(even){background:#f7faf9;}
