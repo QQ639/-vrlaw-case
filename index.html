@@ -3941,10 +3941,13 @@ function openDocPrintWindow(title, bodyHtml, opts){
     .meta div{line-height:1.7;}
     table{width:100%;border-collapse:collapse;margin-top:6px;}
     th,td{border:1px solid #999;padding:7px 10px;font-size:13.5pt;}
-    th{background:#e8f2ef;font-weight:700;text-align:center;}
+    /* แถบหัวตาราง/แถวรวม ใช้สีแบบโปร่ง (rgba) แทนสีทึบ #e8f2ef / #f7faf9
+       สีทึบจะทับลายน้ำที่อยู่ข้างหลังจนโลโก้แหว่งเป็นช่อง ๆ ตรงแถบสีเวลาพิมพ์
+       ค่า rgba นี้ให้เฉดเขียวเท่าเดิมเมื่อวางบนพื้นขาว แต่ลายน้ำทะลุขึ้นมาได้ */
+    th{background:rgba(26,107,92,.10);font-weight:700;text-align:center;}
     td.num{text-align:right;white-space:nowrap;}
     td.c{text-align:center;}
-    tfoot td{font-weight:700;background:#f7faf9;}
+    tfoot td{font-weight:700;background:rgba(26,107,92,.035);}
     .terms{margin-top:14px;font-size:13pt;color:#333;white-space:pre-wrap;}
     .terms b{color:#000;}
     .signblock{margin-top:56px;text-align:center;font-size:14pt;}
