@@ -3322,11 +3322,13 @@ function shortPartyName(v, n){
   t = t.split(/\s*(?:,|\sและ\s|กับพวก)\s*/)[0];
   return cutTxt(t,n) + (many ? " กับพวก" : "");
 }
-/* จ. = โจทก์, ล. = จำเลย */
-function partiesShortPrint(c){
+/* จ. = โจทก์, ล. = จำเลย
+   n = ความยาวชื่อแต่ละฝ่าย ยิ่งตัวอักษรในตารางโต ยิ่งต้องตั้ง n ให้สั้นลง
+   ไม่งั้นชื่อจะล้นเกิน ๒ บรรทัดแล้วถูกตัดทิ้ง */
+function partiesShortPrint(c, n){
   const p = [];
-  if(c.plaintiff) p.push("จ. "+shortPartyName(c.plaintiff));
-  if(c.defendant) p.push("ล. "+shortPartyName(c.defendant));
+  if(c.plaintiff) p.push("จ. "+shortPartyName(c.plaintiff, n));
+  if(c.defendant) p.push("ล. "+shortPartyName(c.defendant, n));
   return p.length ? p.join(" / ") : "—";
 }
 function timeClass(t){
@@ -3482,11 +3484,11 @@ function printSummary(){
       <td class="c">${toThaiNum(i+1)}</td>
       <td class="c">${esc(toThaiNum(c.seqNo||"—"))}</td>
       <td>${cl(esc(toThaiNum(c.caseNumber)))}</td>
-      <td>${cl(esc(partiesShortPrint(c)))}</td>
-      <td>${cl(esc(cutTxt(c.court||"—",34)))}</td>
-      <td>${cl(esc(cutTxt(c.status||"—",28)))}</td>
-      <td>${cl(a?esc(cutTxt(coverApptLine(a),40)):"—")}</td>
-      <td>${cl(esc(cutTxt(c.lawyer,18)))}</td>
+      <td>${cl(esc(partiesShortPrint(c,10)))}</td>
+      <td>${cl(esc(cutTxt(c.court||"—",30)))}</td>
+      <td>${cl(esc(cutTxt(c.status||"—",26)))}</td>
+      <td>${cl(a?esc(cutTxt(coverApptLine(a),26)):"—")}</td>
+      <td>${cl(esc(cutTxt(c.lawyer,16)))}</td>
     </tr>`;
   }).join("");
 
@@ -3518,7 +3520,7 @@ function printSummary(){
     html,body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
     body{
       font-family:"TH Sarabun New","Sarabun","Angsana New",sans-serif;
-      font-size:13pt;color:#000;margin:0;
+      font-size:26pt;color:#000;margin:0;
       width:400mm;                 /* เท่าความกว้างจริงของ A3 แนวนอนหักขอบ — วัดความสูงแล้วตรงกับตอนพิมพ์ */
     }
     /* ทุกช่องในตารางถูกจำกัดไม่ให้เกิน ๒ บรรทัด ส่วนที่เกินตัดทิ้งพร้อมจุดไข่ปลา
@@ -3529,14 +3531,14 @@ function printSummary(){
     .page:last-child{page-break-after:auto;}
     .head{display:flex;align-items:center;gap:12px;border-bottom:2pt solid #000;
           padding-bottom:5px;margin-bottom:8px;}
-    .head img{width:56px;height:56px;object-fit:contain;flex:none;}
-    .office{font-weight:700;font-size:21pt;flex:1;line-height:1.2;}
-    .office small{display:block;font-weight:400;font-size:14pt;}
-    .pg{font-size:14pt;font-weight:600;white-space:nowrap;}
+    .head img{width:76px;height:76px;object-fit:contain;flex:none;}
+    .office{font-weight:700;font-size:30pt;flex:1;line-height:1.15;}
+    .office small{display:block;font-weight:400;font-size:19pt;}
+    .pg{font-size:19pt;font-weight:600;white-space:nowrap;}
     table{width:100%;border-collapse:collapse;table-layout:fixed;}
-    th,td{border:1px solid #000;padding:2px 6px;font-size:13pt;vertical-align:top;
-          line-height:1.15;word-wrap:break-word;}
-    th{background:#e8f2ef;font-weight:700;text-align:center;font-size:12.5pt;}
+    th,td{border:1px solid #000;padding:3px 8px;font-size:26pt;vertical-align:top;
+          line-height:1.1;word-wrap:break-word;}
+    th{background:#e8f2ef;font-weight:700;text-align:center;font-size:24pt;}
     td.c{text-align:center;}
     tbody tr{page-break-inside:avoid;}
     tbody tr:nth-child(even){background:#f7faf9;}
