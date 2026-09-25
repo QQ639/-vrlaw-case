@@ -2753,8 +2753,15 @@ async function saveDetail(id){
     verdict3:    document.getElementById("f-verdict3").value,
     verdictDate1:  document.getElementById("f-verdictDate1").value,
     appealExtend:  document.getElementById("f-appealExtend").value,
+    /* วันที่ยื่นอุทธรณ์/ฎีกาแล้ว — เดิมตกหล่นตรงนี้ ทำให้กรอกแล้วกดบันทึกไม่ติด
+       ระบบมองว่า "ไม่มีการเปลี่ยนแปลง" เพราะไม่เคยอ่านค่าจากช่องมาเทียบ */
+    appealFiled:   document.getElementById("f-appealFiled").value,
     verdictDate2:  document.getElementById("f-verdictDate2").value,
-    supremeExtend: document.getElementById("f-supremeExtend").value
+    supremeExtend: document.getElementById("f-supremeExtend").value,
+    supremeFiled:  document.getElementById("f-supremeFiled").value,
+    /* หนังสือบอกกล่าวก่อนฟ้อง — ตกหล่นแบบเดียวกัน กรอกแล้วกดบันทึกไม่ติด */
+    noticeSent:    document.getElementById("f-noticeSent").value,
+    noticeAck:     document.getElementById("f-noticeAck").value
   };
   const newAppts = readApptRows();
 
