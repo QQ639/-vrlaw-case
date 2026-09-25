@@ -1299,8 +1299,8 @@ let lastFetchAt = 0;
 /* ---------- ตัวจับเวลาการเรียกเซิร์ฟเวอร์ ---------- */
 // เก็บผลล่าสุด 30 ครั้ง ไว้ดูว่าเวลาหมดไปกับคำสั่งไหน แตะแถบสถานะเพื่อดู
 const apiTimings = [];
-function noteTiming(action, ms, attempts, ok){
-  apiTimings.push({ action, ms: Math.round(ms), attempts, ok, at: new Date() });
+function noteTiming(action, ms, attempts, ok, errMsg){
+  apiTimings.push({ action, ms: Math.round(ms), attempts, ok, err: errMsg||"", at: new Date() });
   if(apiTimings.length > 30) apiTimings.shift();
   if(ms > 4000) console.warn(`[api] ${action} ใช้เวลา ${Math.round(ms)} ms`);
   else console.debug(`[api] ${action} ${Math.round(ms)} ms`);
@@ -1321,7 +1321,8 @@ function showApiTimings(){
   const last = apiTimings.slice(-10).reverse()
     .map(t=>`<tr><td>${esc(t.action)}</td><td class="num">${t.ms}</td>
       <td class="num">${t.attempts>1?t.attempts+" ครั้ง":"—"}</td>
-      <td class="num">${t.ok?"สำเร็จ":"ล้มเหลว"}</td></tr>`).join("");
+      <td class="num">${t.ok?"สำเร็จ":"ล้มเหลว"}</td>
+      <td style="font-size:11pt;">${esc(t.err||"")}</td></tr>`).join("");
 
   openDocPrintWindow("เวลาตอบสนองของเซิร์ฟเวอร์", `
     <div class="doctitle">เวลาตอบสนองของเซิร์ฟเวอร์ (มิลลิวินาที)</div>
@@ -1330,8 +1331,9 @@ function showApiTimings(){
       <th style="width:16%">เฉลี่ย</th><th style="width:16%">ช้าสุด</th></tr></thead>
       <tbody>${rows}</tbody></table>
     <div class="doctitle" style="font-size:14pt;margin-top:18px;">10 ครั้งล่าสุด</div>
-    <table><thead><tr><th>คำสั่ง</th><th style="width:16%">เวลา</th>
-      <th style="width:16%">ลองใหม่</th><th style="width:16%">ผล</th></tr></thead>
+    <table><thead><tr><th>คำสั่ง</th><th style="width:12%">เวลา</th>
+      <th style="width:12%">ลองใหม่</th><th style="width:12%">ผล</th>
+      <th style="width:34%">สาเหตุที่ล้มเหลว</th></tr></thead>
       <tbody>${last}</tbody></table>`, {watermark:false});
 }
 
@@ -1359,6 +1361,11 @@ function newReqId(){
   return Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10);
 }
 
+/* เพดานเวลารอเซิร์ฟเวอร์ต่อหนึ่งครั้ง
+   ของเดิมไม่มีเพดาน ถ้า Apps Script ค้าง คำขอจะค้างตลอดไป
+   แถบ "กำลังซิงค์ข้อมูล…" ก็ค้างตามโดยไม่มีข้อความบอกว่าเกิดอะไรขึ้น */
+const API_TIMEOUT_MS = 60000;
+
 async function api(action, payload){
   const body = Object.assign({ action, passcode: session.passcode, user: session.user }, payload||{});
   // สร้างครั้งเดียวนอกวงลองใหม่ ทุกครั้งที่ยิงซ้ำจะใช้รหัสเดิม
@@ -1369,17 +1376,20 @@ async function api(action, payload){
   const t0 = performance.now();
 
   for(let attempt = 1; attempt <= MAX_TRY; attempt++){
+    const ctrl   = (typeof AbortController !== "undefined") ? new AbortController() : null;
+    const killer = ctrl ? setTimeout(()=>ctrl.abort(), API_TIMEOUT_MS) : null;
     try{
       const res = await fetch(SCRIPT_URL, {
         method: "POST",
         headers: { "Content-Type": "text/plain;charset=utf-8" },
         body: JSON.stringify(body),
-        redirect: "follow"
+        redirect: "follow",
+        signal: ctrl ? ctrl.signal : undefined
       });
 
       // 404/429/5xx จาก Google มักเป็นอาการชั่วคราว ลองใหม่ได้
       if(!res.ok){
-        const retryable = res.status === 404 || res.status === 429 || res.status >= 500;
+        const retryable = res.status === 404 || res.status === 403 || res.status === 429 || res.status >= 500;
         const e = new Error(
           res.status === 404
             ? "เซิร์ฟเวอร์ไม่ตอบ (404) — ปกติเป็นอาการชั่วคราวของ Google"
@@ -1394,7 +1404,12 @@ async function api(action, payload){
       const text = await res.text();
       try { data = JSON.parse(text); }
       catch(e){
-        throw new Error('อ่านคำตอบจากเซิร์ฟเวอร์ไม่ได้ — ตรวจสอบว่า Deploy เป็น "Anyone" แล้ว');
+        // Google คืนหน้า HTML แทน JSON เป็นครั้งคราว (หน้า error ชั่วคราว)
+        // เดิมถือว่าเป็นความผิดพลาดถาวร เลิกทันทีโดยไม่ลองใหม่
+        // ซึ่งเป็นสาเหตุที่ boot ล้มเหลวทั้งที่เซิร์ฟเวอร์ยังทำงานอยู่
+        const e2 = new Error('เซิร์ฟเวอร์ตอบกลับไม่ใช่ข้อมูล (อาจเป็นหน้า error ชั่วคราวของ Google)');
+        if(attempt < MAX_TRY){ lastErr = e2; await sleep(800 * attempt); continue; }
+        throw new Error('อ่านคำตอบจากเซิร์ฟเวอร์ไม่ได้ — ถ้าเป็นบ่อย ตรวจสอบว่า Deploy เป็น "Anyone" แล้ว');
       }
       if(!data.ok){
         const err = new Error(data.message || "เกิดข้อผิดพลาด");
@@ -1408,14 +1423,20 @@ async function api(action, payload){
       return data;
 
     }catch(err){
-      // เน็ตสะดุด — ลองใหม่
-      const isNetwork = (err instanceof TypeError) || /fetch|network|Failed to fetch/i.test(err.message||"");
-      if(isNetwork && attempt < MAX_TRY){ lastErr = err; await sleep(600 * attempt); continue; }
-      noteTiming(action, performance.now() - t0, attempt, false);
-      throw err;
+      // เน็ตสะดุด หรือรอจนเกินเพดานเวลา — ลองใหม่
+      const aborted = !!(err && err.name === "AbortError");
+      const e2 = aborted
+        ? new Error("เซิร์ฟเวอร์ไม่ตอบภายใน " + Math.round(API_TIMEOUT_MS/1000) + " วินาที")
+        : err;
+      const isNetwork = aborted || (err instanceof TypeError) || /fetch|network|Failed to fetch/i.test(err.message||"");
+      if(isNetwork && attempt < MAX_TRY){ lastErr = e2; await sleep(600 * attempt); continue; }
+      noteTiming(action, performance.now() - t0, attempt, false, e2 && e2.message);
+      throw e2;
+    }finally{
+      if(killer) clearTimeout(killer);
     }
   }
-  noteTiming(action, performance.now() - t0, MAX_TRY, false);
+  noteTiming(action, performance.now() - t0, MAX_TRY, false, lastErr && lastErr.message);
   throw lastErr || new Error("เชื่อมต่อไม่สำเร็จหลังลอง "+MAX_TRY+" ครั้ง");
 }
 function sleep(ms){ return new Promise(r=>setTimeout(r, ms)); }
@@ -1525,8 +1546,10 @@ function applyCases(list){
  * Apps Script หนึ่งรอบกินเวลาหลายวินาที (ต้อง redirect สองต่อ + ปลุกเครื่อง)
  * ยุบสี่รอบเหลือรอบเดียวจึงช่วยได้มากกว่าการไปเร่งฝั่งชีต
  */
-async function bootLoad(){
-  const r = await api("boot");
+async function bootLoad(fresh){
+  // fresh = true ตอนกดปุ่ม "โหลดข้อมูลใหม่" — บอกเซิร์ฟเวอร์ให้ล้างแคชแล้วอ่านสด
+  // ใช้เวลานานกว่าปกติ แต่จำเป็นเมื่อไปแก้ข้อมูลในชีตด้วยมือ
+  const r = await api("boot", fresh ? { fresh: true } : null);
   session.user = r.user || session.user;
   session.role = r.role || "user";
   applyRolePermissions();
@@ -5647,6 +5670,9 @@ document.getElementById("importFile").addEventListener("change", e=>{
 });
 
 // ============ แถบสถานะการเชื่อมต่อ ============
+/* ระหว่างซิงค์ ให้เดินตัวเลขวินาทีต่อท้ายข้อความ
+   จะได้แยกออกว่า "ช้า" หรือ "ค้าง" และบอกผมได้ว่ากี่วินาที */
+let syncTicker = null;
 function setSyncState(state, text){
   const dot = document.getElementById("sync-dot");
   const el  = document.getElementById("sync-text");
@@ -5657,7 +5683,18 @@ function setSyncState(state, text){
     busy: "กำลังซิงค์ข้อมูล…",
     bad:  "เชื่อมต่อไม่ได้ — โหมดอ่านอย่างเดียว"
   };
-  el.textContent = text || defaults[state] || "";
+  const base = text || defaults[state] || "";
+
+  if(syncTicker){ clearInterval(syncTicker); syncTicker = null; }
+  el.textContent = base;
+
+  if(state === "busy"){
+    const t0 = Date.now();
+    syncTicker = setInterval(()=>{
+      const sec = Math.round((Date.now() - t0) / 1000);
+      el.textContent = base + (sec >= 3 ? "  " + sec + " วิ" : "");
+    }, 1000);
+  }
 }
 
 // ============ เริ่มระบบ ============
@@ -5826,7 +5863,7 @@ document.getElementById("refreshBtn").addEventListener("click", async ()=>{
   setSyncState("busy");
   try{
     histBillingsCache = null;
-    await bootLoad();           // โหลดใหม่ทั้งหมดในรอบเดียวเช่นกัน
+    await bootLoad(true);       // บังคับอ่านสดจากชีต ไม่เอาของในแคช
     refreshCurrentView();
     toast("โหลดข้อมูลใหม่แล้ว ("+cases.length+" สำนวน)");
   }catch(err){
