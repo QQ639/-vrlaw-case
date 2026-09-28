@@ -418,6 +418,9 @@
 
   /* ---------- ตัวเลือกวันที่ภาษาไทย ---------- */
   .tdp{position:relative;}
+  /* แถบปุ่มลัดของชั้นอุทธรณ์/ฎีกา */
+  .quickact{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:2px 0 14px;}
+  .quickact-lb{font-size:12px;letter-spacing:.06em;color:var(--ink-faint);margin-right:2px;}
   .tdp-display{cursor:pointer;background:var(--bg-panel);}
   .tdp-display::placeholder{color:var(--ink-faint);}
   .tdp-pop{
@@ -1641,6 +1644,92 @@ function getStage(status){
   if(ENFORCEMENT_STATUSES.includes(status)) return "enforcement";
   return "trial";
 }
+/* ============================================================
+   ปุ่มลัดชั้นอุทธรณ์ / ฎีกา
+   กดครั้งเดียวจบ: ลงวันที่ยื่น + ย้ายสถานะ + ลบนัดขยายเวลาที่ไม่จำเป็นแล้ว + บันทึก
+   เดิมต้องกรอกวันที่เองแล้วกดบันทึกอีกที ซึ่งเป็นจุดที่ลืมกันบ่อย
+   จนรายงานเช้ายังเตือนว่าเลยกำหนดทั้งที่ยื่นไปแล้ว
+   ============================================================ */
+const FILE_STEPS = {
+  appeal:  { field:"f-appealFiled",  wait:"รอฟังอุทธรณ์", none:"ไม่ยื่นอุทธรณ์",
+             deadline:"ครบอุทธรณ์", extendWord:"ขยายระยะเวลายื่นอุทธรณ์" },
+  supreme: { field:"f-supremeFiled", wait:"รอฟังฎีกา",   none:"ไม่ยื่นฎีกา",
+             deadline:"ครบฎีกา",   extendWord:"ขยายระยะเวลายื่นฎีกา" }
+};
+
+/** ตั้งค่าช่องสถานะจากโค้ด (ช่อง "อื่นๆ ระบุ" ต้องซ่อน/แสดงตามด้วย) */
+function setStatusSelect(val){
+  const sel = document.getElementById("statusSelect");
+  if(!sel) return;
+  sel.value = val;
+  toggleOther("statusSelect","status-other-input");
+}
+
+/** เติมบรรทัดลงช่องหมายเหตุ ถ้ายังไม่มีบรรทัดนั้น */
+function appendNoteLine(line){
+  const el = document.getElementById("f-notes");
+  if(!el) return;
+  const cur = el.value || "";
+  if(cur.indexOf(line) !== -1) return;
+  el.value = cur.trim() ? (cur.replace(/\s+$/,"") + "\n" + line) : line;
+}
+
+/** นัดที่เกี่ยวกับกำหนดยื่น/ขยายเวลาของชั้นนั้น และยังไม่ผ่านไป — ยื่นแล้วก็ไม่ต้องเตือนอีก */
+function staleDeadlineRows(cfg){
+  const today = todayISO();
+  return [...document.querySelectorAll("#apptList .appt-row")].filter(row=>{
+    const d = row.querySelector(".appt-date").value;
+    const e = row.querySelector(".appt-end").value || d;
+    if(!d || e < today) return false;
+    const sel = row.querySelector(".appt-note-sel");
+    const note = sel.value === APPT_OTHER
+      ? row.querySelector(".appt-note").value.trim()
+      : sel.value;
+    return note === cfg.deadline || note.indexOf(cfg.extendWord) !== -1;
+  });
+}
+
+/** กด "ยื่นอุทธรณ์ / ยื่นแก้อุทธรณ์ / ยื่นฎีกา / ยื่นแก้ฎีกา" */
+async function markFiled(id, step, actionLabel){
+  const cfg = FILE_STEPS[step];
+  const el  = cfg && document.getElementById(cfg.field);
+  if(!el) return;
+
+  const date  = el.value || todayISO();
+  const stale = staleDeadlineRows(cfg);
+
+  let msg = actionLabel + " วันที่ " + fmtDate(date)
+          + "\nย้ายสถานะเป็น “" + cfg.wait + "”"
+          + "\n\nตัวนับถอยหลัง “" + cfg.deadline + "” และการเตือนขยายระยะเวลาจะหยุดทันที";
+  if(stale.length) msg += "\nและจะลบวันนัดที่เกี่ยวกับกำหนดยื่นอีก " + stale.length + " รายการ";
+  if(!confirm(msg)) return;
+
+  el.value = date;
+  syncDatePicker(el);
+  setStatusSelect(cfg.wait);
+  stale.forEach(row=>row.remove());
+  appendNoteLine(actionLabel + " " + fmtDate(date));
+  await saveDetail(id);
+}
+
+/** กด "ไม่ยื่นอุทธรณ์ / ไม่ยื่นฎีกา" — ปล่อยให้คดีถึงที่สุด */
+async function markNotFiled(id, step){
+  const cfg = FILE_STEPS[step];
+  if(!cfg) return;
+  const stale = staleDeadlineRows(cfg);
+
+  let msg = cfg.none + " — ให้คดีถึงที่สุด"
+          + "\nย้ายสถานะเป็น “" + DONE_STATUS + "”"
+          + "\n\nสำนวนจะย้ายไปแท็บ “คดีที่สิ้นสุดแล้ว” และหยุดเตือนทุกอย่าง";
+  if(stale.length) msg += "\nและจะลบวันนัดที่เกี่ยวกับกำหนดยื่นอีก " + stale.length + " รายการ";
+  if(!confirm(msg)) return;
+
+  setStatusSelect(DONE_STATUS);
+  stale.forEach(row=>row.remove());
+  appendNoteLine(cfg.none + " " + fmtDate(todayISO()));
+  await saveDetail(id);
+}
+
 function toggleOther(selectId, inputId){
   const sel = document.getElementById(selectId);
   const inp = document.getElementById(inputId);
@@ -2215,6 +2304,12 @@ function openCase(id){
             <span style="font-size:12px;color:var(--ink-faint);margin-top:4px;">ใส่วันที่แล้วตัวนับถอยหลังครบอุทธรณ์จะหายไป</span>
           </div>
         </div>
+        <div class="quickact">
+          <span class="quickact-lb">บันทึกผลชั้นอุทธรณ์</span>
+          <button type="button" class="btn ghost sm" onclick="markFiled('${esc(c.id)}','appeal','ยื่นอุทธรณ์')">ยื่นอุทธรณ์</button>
+          <button type="button" class="btn ghost sm" onclick="markFiled('${esc(c.id)}','appeal','ยื่นแก้อุทธรณ์')">ยื่นแก้อุทธรณ์</button>
+          <button type="button" class="btn ghost sm" onclick="markNotFiled('${esc(c.id)}','appeal')">ไม่ยื่นอุทธรณ์</button>
+        </div>
         <div class="field"><label>ศาลอุทธรณ์</label><input id="f-verdict2" value="${esc(c.verdict2)}"></div>
         <div class="grid2">
           <div class="field"><label>วันอ่านคำพิพากษาอุทธรณ์</label>
@@ -2242,6 +2337,12 @@ function openCase(id){
             </div>
             <span style="font-size:12px;color:var(--ink-faint);margin-top:4px;">ใส่วันที่แล้วตัวนับถอยหลังครบฎีกาจะหายไป</span>
           </div>
+        </div>
+        <div class="quickact">
+          <span class="quickact-lb">บันทึกผลชั้นฎีกา</span>
+          <button type="button" class="btn ghost sm" onclick="markFiled('${esc(c.id)}','supreme','ยื่นฎีกา')">ยื่นฎีกา</button>
+          <button type="button" class="btn ghost sm" onclick="markFiled('${esc(c.id)}','supreme','ยื่นแก้ฎีกา')">ยื่นแก้ฎีกา</button>
+          <button type="button" class="btn ghost sm" onclick="markNotFiled('${esc(c.id)}','supreme')">ไม่ยื่นฎีกา</button>
         </div>
         <div class="field"><label>ศาลฎีกา</label><input id="f-verdict3" value="${esc(c.verdict3)}"></div>
 
