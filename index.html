@@ -3772,9 +3772,9 @@ function printMonthly(){
     if(it.ev){
       // นัดอื่นที่ไม่ผูกกับสำนวน — ไม่มีเลขคดี ใช้ช่องคู่ความแสดงชื่อเรื่องแทน
       caseNoCell = ln("") + ln("");
-      partyCell  = ln(esc(cutTxt(it.ev.title,30))) +
+      partyCell  = ln(esc(it.ev.title || "")) +
                    ln(it.ev.kind ? "[" + esc(cutTxt(it.ev.kind,26)) + "]" : "");
-      placeTxt   = esc(cutTxt(it.ev.place || "",26));
+      placeTxt   = esc(it.ev.place || "");
       apptTxt    = esc(cutTxt(it.ev.title || "",34));
       personTxt  = esc(cutTxt(it.ev.people || "",24));
     } else {
@@ -3782,9 +3782,9 @@ function printMonthly(){
       var red = toThaiNum(it.c.redNumber  || "");
       caseNoCell = ln("ดำ " + esc(cutTxt(blk,16) || "—")) +
                    ln("แดง " + esc(cutTxt(red,16) || "—"));
-      partyCell  = ln("จ. " + esc(shortPartyName(it.c.plaintiff, 26) || "—")) +
-                   ln("ล. " + esc(shortPartyName(it.c.defendant, 26) || "—"));
-      placeTxt   = esc(cutTxt(it.c.court || "",26));
+      partyCell  = ln("จ. " + esc(shortPartyName(it.c.plaintiff, 120) || "—")) +
+                   ln("ล. " + esc(shortPartyName(it.c.defendant, 120) || "—"));
+      placeTxt   = esc(it.c.court || "");
       apptTxt    = esc(cutTxt(it.a.note || "",34));
       personTxt  = esc(cutTxt(it.c.lawyer || "",24));
     }
@@ -3839,7 +3839,8 @@ function printMonthly(){
     /* ทุกช่องในตารางถูกจำกัดไม่ให้เกิน ๒ บรรทัด ส่วนที่เกินตัดทิ้งพร้อมจุดไข่ปลา
        ทำให้ความสูงแถวคงที่ นัดหนึ่งจบใน ๑–๒ บรรทัดเสมอ */
     .cl{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
-        overflow:hidden;text-overflow:ellipsis;}
+        overflow:hidden;text-overflow:ellipsis;
+        overflow-wrap:break-word;word-break:break-word;}
     /* บังคับ ๑ บรรทัดพอดี — ใช้กับเลขคดีดำ/แดง และชื่อโจทก์/จำเลย
        ถ้าใช้ .cl (๒ บรรทัด) แล้วชื่อโจทก์ยาวจนล้นไปบรรทัดสอง ชื่อจำเลยจะหายไปทั้งบรรทัด */
     .cl1{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
