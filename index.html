@@ -3759,30 +3759,45 @@ function printMonthly(){
 
   if(!rows.length){ toast("ไม่มีนัดในเดือน " + monthLabel + " ค่ะ"); return; }
 
+  /* หนึ่งบรรทัดพอดีเสมอ — ใช้กับเลขคดีดำ/แดง และชื่อโจทก์/จำเลย
+     บังคับ ๑ บรรทัดต่อค่า ความสูงแถวจึงคงที่ ไม่ว่าชื่อจะยาวแค่ไหน */
+  const ln = v => `<div class="cl1">${v || "&nbsp;"}</div>`;
+
   const trs = rows.map((r,i)=>{
     const it = r.it;
-    const dateTxt = toThaiNum(r.d) + " " + TH_MONTHS[m];
+    const dateTxt = toThaiNum(r.d) + " " + TH_MONTHS_SHORT[m];   // ย่อชื่อเดือน ช่องวันที่จะได้แคบลง
     const timeTxt = esc((it.a && it.a.time) || "ทั้งวัน");
-    let mainTxt, placeTxt, noteTxt, personTxt;
+    let caseNoCell, partyCell, placeTxt, apptTxt, personTxt;
+
     if(it.ev){
-      mainTxt = esc(cutTxt(it.ev.title,44)) + (it.ev.kind ? " [" + esc(cutTxt(it.ev.kind,14)) + "]" : "");
-      placeTxt = esc(cutTxt(it.ev.place || "",34));
-      noteTxt = "";
-      personTxt = esc(cutTxt(it.ev.people || "",22));
+      // นัดอื่นที่ไม่ผูกกับสำนวน — ไม่มีเลขคดี ใช้ช่องคู่ความแสดงชื่อเรื่องแทน
+      caseNoCell = ln("") + ln("");
+      partyCell  = ln(esc(cutTxt(it.ev.title,30))) +
+                   ln(it.ev.kind ? "[" + esc(cutTxt(it.ev.kind,26)) + "]" : "");
+      placeTxt   = esc(cutTxt(it.ev.place || "",26));
+      apptTxt    = esc(cutTxt(it.ev.title || "",34));
+      personTxt  = esc(cutTxt(it.ev.people || "",24));
     } else {
-      mainTxt = esc(partiesShortPrint(it.c)) + " · " + esc(toThaiNum(it.c.caseNumber||it.c.seqNo||""));
-      placeTxt = esc(cutTxt(it.c.court || "",34));
-      noteTxt = esc(cutTxt(it.a.note || "",42));
-      personTxt = esc(cutTxt(it.c.lawyer || "",22));
+      var blk = toThaiNum(it.c.caseNumber || "");
+      var red = toThaiNum(it.c.redNumber  || "");
+      caseNoCell = ln("ดำ " + esc(cutTxt(blk,16) || "—")) +
+                   ln("แดง " + esc(cutTxt(red,16) || "—"));
+      partyCell  = ln("จ. " + esc(shortPartyName(it.c.plaintiff, 26) || "—")) +
+                   ln("ล. " + esc(shortPartyName(it.c.defendant, 26) || "—"));
+      placeTxt   = esc(cutTxt(it.c.court || "",26));
+      apptTxt    = esc(cutTxt(it.a.note || "",34));
+      personTxt  = esc(cutTxt(it.c.lawyer || "",24));
     }
-    const contMark = it.isStart ? "" : " (ต่อเนื่อง)";
+
+    const contMark = it.isStart ? "" : " (ต่อ)";
     return `<tr${it.isStart?"":' style="font-style:italic;color:#666;"'}>
       <td class="c">${toThaiNum(i+1)}</td>
       <td class="c">${dateTxt}${contMark}</td>
       <td class="c">${timeTxt}</td>
-      <td><div class="cl">${mainTxt}</div></td>
+      <td>${caseNoCell}</td>
+      <td>${partyCell}</td>
       <td><div class="cl">${placeTxt}</div></td>
-      <td><div class="cl">${noteTxt}</div></td>
+      <td><div class="cl">${apptTxt}</div></td>
       <td><div class="cl">${personTxt}</div></td>
     </tr>`;
   }).join("");
@@ -3795,10 +3810,14 @@ function printMonthly(){
       <div class="pg"></div>
     </div>`;
 
+  /* ความกว้างรวมต้องได้ ๑๐๐% พอดี
+     ย่อ วันที่ / เวลา / ศาล / ทนาย ลง เพื่อเปิดที่ให้คอลัมน์เลขคดีที่เพิ่มเข้ามา
+     และให้คอลัมน์คู่ความกว้างพอใส่ชื่อเต็มบรรทัดละฝ่าย */
   const theadTpl = `<thead><tr>
-      <th style="width:4%">ที่</th><th style="width:12%">วันที่</th><th style="width:7%">เวลา</th>
-      <th style="width:24%">รายการ</th><th style="width:18%">ศาล/สถานที่</th>
-      <th style="width:20%">หมายเหตุ</th><th style="width:15%">ทนาย/ผู้เกี่ยวข้อง</th>
+      <th style="width:3%">ที่</th><th style="width:8%">วันที่</th><th style="width:5%">เวลา</th>
+      <th style="width:14%">เลขคดี</th><th style="width:30%">คู่ความ</th>
+      <th style="width:13%">ศาล/สถานที่</th><th style="width:17%">นัด</th>
+      <th style="width:10%">ทนาย</th>
     </tr></thead>`;
 
   const w = window.open("", "_blank");
@@ -3814,13 +3833,16 @@ function printMonthly(){
     html,body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
     body{
       font-family:"TH Sarabun New","Sarabun","Angsana New",sans-serif;
-      font-size:13pt;color:#000;margin:0;
+      font-size:19.5pt;color:#000;margin:0;   /* ขยายจาก 13pt อีกครึ่งเท่า */
       width:400mm;                 /* เท่าความกว้างจริงของ A3 แนวนอนหักขอบ — วัดความสูงแล้วตรงกับตอนพิมพ์ */
     }
     /* ทุกช่องในตารางถูกจำกัดไม่ให้เกิน ๒ บรรทัด ส่วนที่เกินตัดทิ้งพร้อมจุดไข่ปลา
        ทำให้ความสูงแถวคงที่ นัดหนึ่งจบใน ๑–๒ บรรทัดเสมอ */
     .cl{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
         overflow:hidden;text-overflow:ellipsis;}
+    /* บังคับ ๑ บรรทัดพอดี — ใช้กับเลขคดีดำ/แดง และชื่อโจทก์/จำเลย
+       ถ้าใช้ .cl (๒ บรรทัด) แล้วชื่อโจทก์ยาวจนล้นไปบรรทัดสอง ชื่อจำเลยจะหายไปทั้งบรรทัด */
+    .cl1{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
     .page{page-break-after:always;}
     .page:last-child{page-break-after:auto;}
     .head{display:flex;align-items:center;gap:12px;border-bottom:2pt solid #000;
@@ -3830,9 +3852,9 @@ function printMonthly(){
     .office small{display:block;font-weight:400;font-size:14pt;}
     .pg{font-size:14pt;font-weight:600;white-space:nowrap;}
     table{width:100%;border-collapse:collapse;table-layout:fixed;}
-    th,td{border:1px solid #000;padding:2px 6px;font-size:13pt;vertical-align:top;
+    th,td{border:1px solid #000;padding:2px 6px;font-size:19.5pt;vertical-align:top;
           line-height:1.15;word-wrap:break-word;}
-    th{background:#e8f2ef;font-weight:700;text-align:center;font-size:12.5pt;}
+    th{background:#e8f2ef;font-weight:700;text-align:center;font-size:18pt;}
     td.c{text-align:center;white-space:nowrap;}
     tbody tr{page-break-inside:avoid;}
     tbody tr:nth-child(even){background:#f7faf9;}
