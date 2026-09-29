@@ -3664,18 +3664,24 @@ function printSummary(){
   const printedOn = thaiFullDate(todayISO());
 
   // แถวทั้งหมดในตารางเดียว เดี๋ยวให้หน้าต่างพิมพ์ไปวัดความสูงจริงแล้วตัดหน้าเอง
-  const trs = list.map((c,i)=>{
-    const a = nextAppt(c);
-    const cl = v=>`<div class="cl">${v}</div>`;   /* จำกัดไม่ให้เกิน ๒ บรรทัด */
+  const trs = list.map(c=>{
+    const a  = nextAppt(c);
+    const cl = v=>`<div class="cl">${v}</div>`;    /* ยอมได้ถึง ๒ บรรทัด */
+    const ln = v=>`<div class="cl1">${v || "&nbsp;"}</div>`;   /* บังคับ ๑ บรรทัดพอดี */
+
+    // วันนัดถัดไป: บรรทัดบนเป็นวัน บรรทัดล่างเป็นเรื่องที่นัด
+    const apptDay  = a ? (fmtDate(a.date)
+                          + (a.endDate && a.endDate !== a.date ? " – " + fmtDate(a.endDate) : "")
+                          + (a.time ? " (" + a.time + ")" : "")) : "—";
+    const apptNote = a ? (a.note || "") : "";
+
     return `<tr>
-      <td class="c">${toThaiNum(i+1)}</td>
       <td class="c">${esc(toThaiNum(c.seqNo||"—"))}</td>
-      <td>${cl(esc(toThaiNum(c.caseNumber)))}</td>
-      <td>${cl(esc(partiesShortPrint(c,10)))}</td>
-      <td>${cl(esc(cutTxt(c.court||"—",30)))}</td>
-      <td>${cl(esc(cutTxt(c.status||"—",26)))}</td>
-      <td>${cl(a?esc(cutTxt(coverApptLine(a),26)):"—")}</td>
-      <td>${cl(esc(cutTxt(c.lawyer,16)))}</td>
+      <td>${ln("ดำ " + (esc(toThaiNum(c.caseNumber)) || "—"))}${ln("แดง " + (esc(toThaiNum(c.redNumber)) || "—"))}</td>
+      <td>${ln("จ. " + (esc(shortPartyName(c.plaintiff,120)) || "—"))}${ln("ล. " + (esc(shortPartyName(c.defendant,120)) || "—"))}</td>
+      <td>${cl(esc(c.court||"—"))}</td>
+      <td>${ln(esc(apptDay))}${ln(esc(apptNote))}</td>
+      <td>${cl(esc(c.lawyer||"—"))}</td>
     </tr>`;
   }).join("");
 
@@ -3687,11 +3693,13 @@ function printSummary(){
       <div class="pg"></div>
     </div>`;
 
+  /* ตัดคอลัมน์ "ที่" ออก เพราะซ้ำกับ "ลำดับสำนวน" ที่เป็นเลขจริงของสำนวน
+     และตัด "อยู่ระหว่าง" ออก เพราะเรื่องที่นัดในช่องวันนัดถัดไปบอกอยู่แล้ว
+     ความกว้างรวมต้องได้ ๑๐๐% พอดี */
   const theadTpl = `<thead><tr>
-      <th style="width:5%">ที่</th><th style="width:7%">ลำดับ</th><th style="width:13%">เลขคดี</th>
-      <th style="width:22%">ชื่อคดี (คู่ความ)</th><th style="width:16%">ชื่อศาล</th>
-      <th style="width:14%">อยู่ระหว่าง</th><th style="width:14%">วันนัดถัดไป</th>
-      <th style="width:9%">ทนาย</th>
+      <th style="width:7%">ลำดับ</th><th style="width:15%">เลขคดี</th>
+      <th style="width:32%">คู่ความ</th><th style="width:16%">ชื่อศาล</th>
+      <th style="width:20%">วันนัดถัดไป</th><th style="width:10%">ทนาย</th>
     </tr></thead>`;
 
   const w = window.open("", "_blank");
@@ -3707,13 +3715,17 @@ function printSummary(){
     html,body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
     body{
       font-family:"TH Sarabun New","Sarabun","Angsana New",sans-serif;
-      font-size:26pt;color:#000;margin:0;
+      font-size:19.5pt;color:#000;margin:0;   /* เท่ากับตารางนัดรายเดือน */
       width:400mm;                 /* เท่าความกว้างจริงของ A3 แนวนอนหักขอบ — วัดความสูงแล้วตรงกับตอนพิมพ์ */
     }
     /* ทุกช่องในตารางถูกจำกัดไม่ให้เกิน ๒ บรรทัด ส่วนที่เกินตัดทิ้งพร้อมจุดไข่ปลา
        ทำให้ความสูงแถวคงที่ คดีหนึ่งจบใน ๑–๒ บรรทัดเสมอ ไม่ว่าชื่อคู่ความจะยาวแค่ไหน */
     .cl{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
-        overflow:hidden;text-overflow:ellipsis;}
+        overflow:hidden;text-overflow:ellipsis;
+        overflow-wrap:break-word;word-break:break-word;}
+    /* บังคับ ๑ บรรทัดพอดี — เลขคดีดำ/แดง ชื่อโจทก์/จำเลย และวัน/เรื่องที่นัด
+       ถ้าใช้ .cl แล้วค่าบรรทัดแรกยาวจนล้น ค่าบรรทัดที่สองจะหายไปทั้งบรรทัด */
+    .cl1{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
     .page{page-break-after:always;}
     .page:last-child{page-break-after:auto;}
     .head{display:flex;align-items:center;gap:12px;border-bottom:2pt solid #000;
@@ -3723,9 +3735,9 @@ function printSummary(){
     .office small{display:block;font-weight:400;font-size:19pt;}
     .pg{font-size:19pt;font-weight:600;white-space:nowrap;}
     table{width:100%;border-collapse:collapse;table-layout:fixed;}
-    th,td{border:1px solid #000;padding:3px 8px;font-size:26pt;vertical-align:top;
+    th,td{border:1px solid #000;padding:3px 8px;font-size:19.5pt;vertical-align:top;
           line-height:1.1;word-wrap:break-word;}
-    th{background:#e8f2ef;font-weight:700;text-align:center;font-size:24pt;}
+    th{background:#e8f2ef;font-weight:700;text-align:center;font-size:18pt;}
     td.c{text-align:center;}
     tbody tr{page-break-inside:avoid;}
     tbody tr:nth-child(even){background:#f7faf9;}
