@@ -1409,6 +1409,10 @@ async function api(action, payload){
         if(retryable && attempt < MAX_TRY && (performance.now() - t0) < API_RETRY_BUDGET_MS){
           lastErr = e; await sleep(600 * attempt); continue;
         }
+        if(retryable && WRITE_ACTIONS.indexOf(action) !== -1){
+          const ok = await confirmWrite(body, action, t0);
+          if(ok){ toast("บันทึกสำเร็จ (ยืนยันกับเซิร์ฟเวอร์อีกครั้งแล้ว)"); return ok; }
+        }
         if(retryable) e.message += " — กด" + (action === "save" ? "บันทึก" : "ลองใหม่") + "อีกครั้งได้เลย ระบบกันบันทึกซ้ำไว้แล้ว";
         throw e;
       }
@@ -1456,6 +1460,44 @@ async function api(action, payload){
   noteTiming(action, performance.now() - t0, MAX_TRY, false, lastErr && lastErr.message);
   throw lastErr || new Error("เชื่อมต่อไม่สำเร็จหลังลอง "+MAX_TRY+" ครั้ง");
 }
+
+/* คำสั่งที่เขียนข้อมูล — ทุกตัวแนบ reqId และเซิร์ฟเวอร์กันทำซ้ำให้อยู่แล้ว
+   จึงยิงยืนยันซ้ำได้โดยไม่เกิดข้อมูลซ้ำหรือเลขเอกสารซ้ำ */
+const WRITE_ACTIONS = ["save","quickAdd","delete","folder","saveEvent","deleteEvent",
+  "saveQuote","saveReceipt","saveBilling","saveContract","voidDoc","deleteDoc","setBillingPaid"];
+
+/**
+ * ยิงยืนยันครั้งสุดท้ายหลังจากลองแล้วไม่สำเร็จ
+ *
+ * Apps Script ตอบคำขอด้วยการ redirect ไปอีกโดเมนหนึ่ง ถ้าฝั่งเซิร์ฟเวอร์ใช้เวลานาน
+ * ลิงก์ปลายทางอาจหมดอายุก่อน เบราว์เซอร์จึงได้ 404 กลับมา
+ * ทั้งที่งานฝั่งเซิร์ฟเวอร์ "ทำเสร็จแล้ว" — ข้อมูลถูกบันทึกลงชีตเรียบร้อย
+ * แต่ผู้ใช้เห็นว่าเซฟไม่ได้ แล้วกดซ้ำโดยไม่จำเป็น
+ *
+ * ยิงซ้ำด้วย reqId เดิม ถ้ารอบก่อนสำเร็จจริง เซิร์ฟเวอร์จะคืนผลเดิมจากแคชทันที
+ * ใช้เวลาไม่กี่วินาที ไม่ได้ทำงานซ้ำ จึงเปลี่ยนจาก "เซฟไม่ได้" เป็นสำเร็จได้เลย
+ */
+async function confirmWrite(body, action, t0){
+  const ctrl   = (typeof AbortController !== "undefined") ? new AbortController() : null;
+  const killer = ctrl ? setTimeout(()=>ctrl.abort(), 15000) : null;
+  try{
+    const res = await fetch(SCRIPT_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify(body),
+      redirect: "follow",
+      signal: ctrl ? ctrl.signal : undefined
+    });
+    if(!res.ok) return null;
+    const data = JSON.parse(await res.text());
+    if(!data.ok) return null;
+    noteTiming(action, performance.now() - t0, MAX_TRY_CONFIRM, true, "");
+    return data;
+  }catch(e){ return null; }
+  finally{ if(killer) clearTimeout(killer); }
+}
+const MAX_TRY_CONFIRM = 4;
+
 function sleep(ms){ return new Promise(r=>setTimeout(r, ms)); }
 
 function saveSession(){
