@@ -1364,10 +1364,17 @@ function newReqId(){
   return Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10);
 }
 
-/* เพดานเวลารอเซิร์ฟเวอร์ต่อหนึ่งครั้ง
+/* เพดานเวลารอเซิร์ฟเวอร์ต่อการยิงหนึ่งครั้ง
    ของเดิมไม่มีเพดาน ถ้า Apps Script ค้าง คำขอจะค้างตลอดไป
    แถบ "กำลังซิงค์ข้อมูล…" ก็ค้างตามโดยไม่มีข้อความบอกว่าเกิดอะไรขึ้น */
-const API_TIMEOUT_MS = 60000;
+const API_TIMEOUT_MS = 45000;
+
+/* งบเวลารวมสำหรับการลองใหม่
+   Google คืน 404 ชั่วคราวเป็นครั้งคราว ซึ่งนับเป็นอาการที่ลองใหม่ได้
+   แต่ถ้าแต่ละครั้งกินเวลา 30-40 วินาที การลองครบ 3 ครั้งแปลว่าผู้ใช้รอเกิน 100 วินาที
+   จึงกำหนดว่าถ้าเลยงบนี้แล้วไม่เริ่มรอบใหม่ ให้แจ้งผู้ใช้ไปเลยว่ากดซ้ำได้
+   การกดซ้ำปลอดภัย เพราะทุกคำขอแนบ reqId และเซิร์ฟเวอร์กันบันทึกซ้ำอยู่แล้ว */
+const API_RETRY_BUDGET_MS = 30000;
 
 async function api(action, payload){
   const body = Object.assign({ action, passcode: session.passcode, user: session.user }, payload||{});
@@ -1399,7 +1406,10 @@ async function api(action, payload){
             : "เซิร์ฟเวอร์ตอบกลับผิดพลาด ("+res.status+")"
         );
         e.status = res.status;
-        if(retryable && attempt < MAX_TRY){ lastErr = e; await sleep(600 * attempt); continue; }
+        if(retryable && attempt < MAX_TRY && (performance.now() - t0) < API_RETRY_BUDGET_MS){
+          lastErr = e; await sleep(600 * attempt); continue;
+        }
+        if(retryable) e.message += " — กด" + (action === "save" ? "บันทึก" : "ลองใหม่") + "อีกครั้งได้เลย ระบบกันบันทึกซ้ำไว้แล้ว";
         throw e;
       }
 
@@ -1411,7 +1421,9 @@ async function api(action, payload){
         // เดิมถือว่าเป็นความผิดพลาดถาวร เลิกทันทีโดยไม่ลองใหม่
         // ซึ่งเป็นสาเหตุที่ boot ล้มเหลวทั้งที่เซิร์ฟเวอร์ยังทำงานอยู่
         const e2 = new Error('เซิร์ฟเวอร์ตอบกลับไม่ใช่ข้อมูล (อาจเป็นหน้า error ชั่วคราวของ Google)');
-        if(attempt < MAX_TRY){ lastErr = e2; await sleep(800 * attempt); continue; }
+        if(attempt < MAX_TRY && (performance.now() - t0) < API_RETRY_BUDGET_MS){
+          lastErr = e2; await sleep(800 * attempt); continue;
+        }
         throw new Error('อ่านคำตอบจากเซิร์ฟเวอร์ไม่ได้ — ถ้าเป็นบ่อย ตรวจสอบว่า Deploy เป็น "Anyone" แล้ว');
       }
       if(!data.ok){
@@ -1432,7 +1444,9 @@ async function api(action, payload){
         ? new Error("เซิร์ฟเวอร์ไม่ตอบภายใน " + Math.round(API_TIMEOUT_MS/1000) + " วินาที")
         : err;
       const isNetwork = aborted || (err instanceof TypeError) || /fetch|network|Failed to fetch/i.test(err.message||"");
-      if(isNetwork && attempt < MAX_TRY){ lastErr = e2; await sleep(600 * attempt); continue; }
+      if(isNetwork && attempt < MAX_TRY && (performance.now() - t0) < API_RETRY_BUDGET_MS){
+        lastErr = e2; await sleep(600 * attempt); continue;
+      }
       noteTiming(action, performance.now() - t0, attempt, false, e2 && e2.message);
       throw e2;
     }finally{
